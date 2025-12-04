@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Git Learning App (AIエディタ)
 
-## Getting Started
+インタラクティブにGitを学習できるWebアプリケーションです。ブラウザ上で動作するGitシミュレーター、コミットグラフの可視化、そして実践的なシナリオを通じて、Gitの基本から応用までを学ぶことができます。
 
-First, run the development server:
+## 特徴
+
+-   **ブラウザ内Gitシミュレーション**: サーバーサイドのGitに依存せず、ブラウザ上でコマンドを実行・学習できます。
+-   **視覚的なフィードバック**: コミットグラフやファイルツリーがリアルタイムに更新され、操作の結果を直感的に理解できます。
+-   **実践的なシナリオ**: 基本的なコミットから、ブランチ操作、マージ、コンフリクト解消まで、段階的に学べるレベルを用意しています。
+-   **コンフリクト解消UI**: 実際の開発現場のようなGUIでのコンフリクト解消を体験できます。
+
+## 動作環境
+
+-   Node.js 18.17.0 以上
+-   npm, yarn, pnpm, または bun
+
+## セットアップ手順
+
+プロジェクトをローカル環境で実行するための手順です。
+
+### 1. リポジトリのクローン
+
+```bash
+git clone <repository-url>
+cd AIエディタ
+```
+
+### 2. 依存関係のインストール
+
+```bash
+npm install
+```
+
+### 3. 開発サーバーの起動
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+ブラウザで [http://localhost:3000](http://localhost:3000) を開いてください。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## テストの実行
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Vitestを使用したユニットテストを実行できます。
 
-## Learn More
+```bash
+# テストを一度だけ実行
+npm run test
 
-To learn more about Next.js, take a look at the following resources:
+# ウォッチモードで実行（開発中）
+npx vitest
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## ドキュメント
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+詳細な設計や実装内容については、`docs/` ディレクトリ内のドキュメントを参照してください。
 
-## Deploy on Vercel
+-   [01_project_setup.md](docs/01_project_setup.md): プロジェクトセットアップ
+-   [02_core_features.md](docs/02_core_features.md): コア機能の実装
+-   [03_feature_expansion.md](docs/03_feature_expansion.md): 機能拡張
+-   [04_content_expansion.md](docs/04_content_expansion.md): コンテンツ拡充
+-   [05_cleanup_and_polish.md](docs/05_cleanup_and_polish.md): 仕上げと修正
+-   [06_testing.md](docs/06_testing.md): テストの導入
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 技術スタック
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+-   **Framework**: Next.js 14 (App Router)
+-   **Language**: TypeScript
+-   **Styling**: Tailwind CSS
+-   **Icons**: Lucide React
+-   **Animation**: Framer Motion, Canvas Confetti
+-   **Testing**: Vitest
