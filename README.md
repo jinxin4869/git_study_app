@@ -1,4 +1,4 @@
-# Git Learning App (AIエディタ)
+# Git Learning App (全てAntigravityによって作られています)
 
 インタラクティブにGitを学習できるWebアプリケーションです。ブラウザ上で動作するGitシミュレーター、コミットグラフの可視化、そして実践的なシナリオを通じて、Gitの基本から応用までを学ぶことができます。
 
@@ -22,7 +22,7 @@
 
 ```bash
 git clone <repository-url>
-cd AIエディタ
+cd /git_study_app
 ```
 
 ### 2. 依存関係のインストール
