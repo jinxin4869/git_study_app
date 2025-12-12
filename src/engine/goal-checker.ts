@@ -15,7 +15,7 @@ export const checkGoal = (currentState: GitState, scenario: Scenario, lastComman
   }
   if (goal.type === 'command_executed') {
       const command = goal.params?.command as string;
-      return command ? (lastCommand === command || (lastCommand && lastCommand.startsWith(command))) : false;
+      return command ? (lastCommand === command || (typeof lastCommand === 'string' && lastCommand.startsWith(command))) : false;
   }
   if (goal.type === 'file_staged') {
       const name = goal.params?.name as string;
