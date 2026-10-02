@@ -8,10 +8,56 @@
 -   **視覚的なフィードバック**: コミットグラフやファイルツリーがリアルタイムに更新され、操作の結果を直感的に理解できます。
 -   **実践的なシナリオ**: 基本的なコミットから、ブランチ操作、マージ、コンフリクト解消まで、段階的に学べるレベルを用意しています。
 -   **コンフリクト解消UI**: 実際の開発現場のようなGUIでのコンフリクト解消を体験できます。
+-   **実務向けの小さな演習**: ステージ解除、変更の取り消し、削除・名前変更、amend、目的別コミットを個別に練習できます。
+-   **GitHubの模擬演習**: PR作成、レビューの修正依頼、CI失敗への対応、修正後の再チェックとマージを練習できます。実際のGitHubには接続しません。
+
+## 学習内容と対応状況
+
+現在は139演習です。`/game` で演習を選び、ターミナルにコマンドを入力します。各演習の初期状態は独立しています。コースとコマンド名で絞り込みでき、やり直しボタンで選択中の演習を最初から試せます。
+
+| コース | 演習数 | 内容 |
+| --- | ---: | --- |
+| 基本操作 | 10 | init、ファイル作成、status、add、commit、log、diff |
+| ブランチ | 12 | ブランチ作成、切り替え、並行開発、履歴の分岐、名前変更、削除、Detached HEADの救出 |
+| マージ | 6 | 統合先の確認、fast-forward、マージコミット、--no-ff |
+| 作業の退避 | 11 | stash、一覧、復元、未追跡ファイルの退避、複数の保存、削除、復元時の競合 |
+| 取り消し | 4 | soft／hard reset、修正して再コミット |
+| 過去の調査 | 3 | 履歴、Detached HEAD、ブランチへの復帰 |
+| コンフリクト | 4 | 発生、確認、解消、マージの完了 |
+| 日常操作・取り消し | 18 | ステージ前後の差分、ファイルごとの記録、restore、rm、mv、amend、switch、目的別コミット、add -p、.gitignore、追跡解除 |
+| GitHub・PR・レビュー・CI | 9 | PR作成・確認、修正依頼、CI失敗・成功、承認、マージ、PRを閉じる、レビュー修正 |
+| リモート・チーム開発 | 13 | clone、接続先の管理、fetch、pull、push、upstream、分岐後の統合、pull --rebase、prune、force-with-leaseの拒否 |
+| 履歴・調査・復旧 | 16 | log、show、rebase、cherry-pick、revert、reflogでの救出、タグと保守ブランチ、blame、履歴検索、タグのpush |
+| 競合の継続・中断 | 6 | rebase／cherry-pick／revertの競合解消・--continue・--abort |
+| 履歴整理・対話的rebase | 6 | reword、squash、fixup、drop、並び替え、editによるコミット分割 |
+| 不具合の調査 | 4 | bisectの開始、good／bad、原因コミット特定、reset |
+| 並行作業・特殊構成 | 10 | worktree、sparse-checkout、submodule、Git LFSの対象設定 |
+| 実務の総合演習 | 7 | 機能開発からPR、チームの競合、緊急修正、履歴整理、復旧、revert、リリース保守 |
+
+GitHub演習では、`gh pr create/view/checks/merge/close` に加え、アプリ専用の `simulate` コマンドで模擬レビュアーとCIを操作します。
+
+```text
+gh pr create --title "Add login" --body "ログイン機能とテストを追加" --base main
+simulate review approve 1
+simulate ci pass 1
+gh pr merge 1 --merge
+```
+
+承認やCIの結果はコミットに紐づきます。新しい変更をpushすると、以前の承認やCI成功ではマージできません。模擬CIは指定した成功・失敗を再現するもので、実際のテストやGitHub Actionsは実行しません。
+
+### 学び方と再現範囲
+
+[実務向けGit学習カリキュラム](docs/practical_git_curriculum.md)に、細かい操作を12章に整理しています。一操作ずつ練習したあと、7つの総合演習で実務の流れを通して試せます。検索は説明・ヒント内のコマンドも対象です。クリアした演習にはこのセッション内の達成表示が付きます。
+
+対話的rebaseは画面の編集欄でtodoを変更し、`git rebase --continue` で進めます。`git add -p` は提示された変更に `y`／`n`／`q` で応答します。
+
+シミュレーターはGitの全コマンド・全オプションを再現していません。競合は主にファイル単位、bisectは主に第一親の直線履歴、sparse-checkoutは基本的なcone形式を扱います。worktreeの移動やsubmoduleは仮想のファイル状態で再現します。Git LFSは `install`／`track` と `.gitattributes` の設定を練習する範囲で、バイナリのポインタ変換・転送は行いません。実Gitとの差とLFSポインタの読み方はカリキュラムに記載しています。
+
+全139演習に解答手順があり、初期状態から達成までの自動テストを用意しています。
 
 ## 動作環境
 
--   Node.js 18.17.0 以上
+-   Node.js 20 または22、24以上（テストを含む）
 -   npm, yarn, pnpm, または bun
 
 ## セットアップ手順
@@ -22,7 +68,7 @@
 
 ```bash
 git clone <repository-url>
-cd /git_study_app
+cd git_study_app
 ```
 
 ### 2. 依存関係のインストール
@@ -48,13 +94,14 @@ Vitestを使用したユニットテストを実行できます。
 npm run test
 
 # ウォッチモードで実行（開発中）
-npx vitest
+npm run test:watch
 ```
 
 ## ドキュメント
 
 詳細な設計や実装内容については、`docs/` ディレクトリ内のドキュメントを参照してください。
 
+-   [実務向けGit学習カリキュラム](docs/practical_git_curriculum.md): 12章の学習順序、139演習の対応状況、7つの総合演習、再現範囲
 -   [01_project_setup.md](docs/01_project_setup.md): プロジェクトセットアップ
 -   [02_core_features.md](docs/02_core_features.md): コア機能の実装
 -   [03_feature_expansion.md](docs/03_feature_expansion.md): 機能拡張
@@ -64,7 +111,7 @@ npx vitest
 
 ## 技術スタック
 
--   **Framework**: Next.js 14 (App Router)
+-   **Framework**: Next.js 15 (App Router)
 -   **Language**: TypeScript
 -   **Styling**: Tailwind CSS
 -   **Icons**: Lucide React

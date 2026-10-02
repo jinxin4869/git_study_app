@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { GitGraph, Terminal, ArrowRight, Code, Cpu, GitBranch } from 'lucide-react';
+import { GitGraph, Terminal, ArrowRight, Code, GitBranch } from 'lucide-react';
 
 export default function Home() {
   return (

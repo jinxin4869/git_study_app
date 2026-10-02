@@ -161,14 +161,17 @@ export function FileTree({ state, onFileClick }: FileTreeProps) {
       }
       return (
         <div key={node.path}>
-          <div 
-            className="flex items-center gap-1 py-1 px-2 hover:bg-gray-800 cursor-pointer text-gray-400 select-none"
+          <button
+            type="button"
+            aria-expanded={isExpanded}
+            aria-label={`${node.path}フォルダ`}
+            className="flex w-full items-center gap-1 py-1 px-2 hover:bg-gray-800 focus-visible:outline-2 focus-visible:outline-blue-400 cursor-pointer text-gray-400 select-none text-left"
             style={{ paddingLeft }}
             onClick={() => toggleFolder(node.path)}
           >
             <Folder size={14} className={isExpanded ? 'text-blue-400' : 'text-gray-500'} />
             <span className="text-sm">{node.name}</span>
-          </div>
+          </button>
           {isExpanded && (
             <div>
               {Object.values(node.children || {}).map(child => renderNode(child, depth + 1))}
@@ -203,16 +206,18 @@ export function FileTree({ state, onFileClick }: FileTreeProps) {
       }
 
       return (
-        <div 
+        <button
+          type="button"
+          aria-label={`${node.path}を開く`}
           key={node.path}
-          className="flex items-center gap-2 py-1 px-2 hover:bg-gray-800 cursor-pointer select-none"
+          className="flex w-full items-center gap-2 py-1 px-2 hover:bg-gray-800 focus-visible:outline-2 focus-visible:outline-blue-400 cursor-pointer select-none text-left"
           style={{ paddingLeft }}
-          onClick={() => node.content && onFileClick(node.path, node.content)}
+          onClick={() => node.content !== undefined && onFileClick(node.path, node.content)}
         >
           <Icon size={14} className={colorClass} />
           <span className={`text-sm ${colorClass}`}>{node.name}</span>
           {statusIcon}
-        </div>
+        </button>
       );
     }
   };

@@ -91,21 +91,18 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
    * Reconstructs the file content based on user decisions and triggers onResolve.
    */
   const handleComplete = () => {
-    let resolved = '';
-    sections.forEach(s => {
-      if (s.type === 'text') {
-        resolved += s.content + '\n';
-      } else {
-        const decision = decisions[s.id];
-        if (decision === 'current') resolved += s.current + '\n';
-        else if (decision === 'incoming') resolved += s.incoming + '\n';
-        else if (decision === 'both') resolved += s.current + '\n' + s.incoming + '\n';
-      }
-    });
-    onResolve(filePath, resolved.trim());
+    if (!allResolved) return;
+    const resolved = sections.map(s => {
+      if (s.type === 'text') return s.content;
+      const decision = decisions[s.id];
+      if (decision === 'current') return s.current;
+      if (decision === 'incoming') return s.incoming;
+      return s.current + '\n' + s.incoming;
+    }).join('\n');
+    onResolve(filePath, resolved);
   };
 
-  const allResolved = sections.every(s => s.type === 'text' || decisions[s.id] !== null);
+  const allResolved = sections.every(s => s.type === 'text' || !!decisions[s.id]);
   const hasConflicts = content.includes('<<<<<<<');
 
   return (

@@ -1,5 +1,11 @@
 import { GitState, CommandResult, Commit, FileChange } from '@/types/git';
 import { generateDiff } from '@/utils/diff-utils';
+import { headTree, indexTree, sameTree, cleanTrackedFiles, inSparseScope, sparseTree, untrackedFiles } from './git-state';
+import { githubCommand } from './github-simulator';
+import { copyHistory, isAncestor, resolveRevision } from './revisions';
+import { advancedCommand } from './advanced-simulator';
+import { isIgnored } from './gitignore';
+import { diffLines } from 'diff';
 
 /**
  * GitEngine class simulates the core behavior of Git.
@@ -9,7 +15,7 @@ export class GitEngine {
   private state: GitState;
 
   constructor(initialState?: GitState) {
-    this.state = initialState || this.createInitialState();
+    this.state = initialState ? JSON.parse(JSON.stringify(initialState)) : this.createInitialState();
   }
 
   /**
@@ -44,17 +50,49 @@ export class GitEngine {
     this.state = JSON.parse(JSON.stringify(newState));
   }
 
+  public setRebaseTodo(todo: string): CommandResult {
+    if (this.state.operation?.awaiting !== 'todo') return { success: false, message: 'No rebase todo editor is open.' };
+    this.state.operation.todo = todo;
+    return { success: true, message: '', newState: this.getState() };
+  }
+
   /**
    * Executes a git command.
    * @param command The full command string (e.g., "git commit -m 'msg'")
    */
   public execute(command: string): CommandResult {
-    const parts = command.trim().split(/\s+/);
+    const previousState = this.getState();
+    const previousId = this.resolveHeadCommitId();
+    const previousHead = { ...this.state.HEAD };
+    const result = this.executeCommand(command);
+    if (!result.success && !result.newState) this.state = previousState;
+    const currentId = this.resolveHeadCommitId();
+    if ((result.success || result.newState) && currentId && (currentId !== previousId || this.state.HEAD.value !== previousHead.value || this.state.HEAD.type !== previousHead.type)) {
+      if (!this.state.reflog) this.state.reflog = previousId ? [{ id: previousId, command: 'initial state' }] : [];
+      this.state.reflog.unshift({ id: currentId, command });
+    }
+    if (result.newState) {
+      const untracked = untrackedFiles(this.state);
+      this.state.workingDirectory = { ...sparseTree(this.state, this.state.workingDirectory), ...untracked };
+      result.newState = this.getState();
+    }
+    return result;
+  }
+
+  private executeCommand(command: string): CommandResult {
+    const tokens = command.trim().match(/"(?:\\.|[^"\\])*"|'[^']*'|[^\s]+/g) || [];
+    const parts = tokens.map(token => /^['"]/.test(token) ? token.slice(1, -1) : token);
+    if (this.state.patchSession) return ['y', 'n', 'q'].includes(parts[0]) ? this.answerPatch(parts[0]) : { success: false, message: 'ハンクをy/nで選ぶか、qで終了してください。' };
+    if (parts[0] === 'cd') return advancedCommand(this.state, 'cd', parts.slice(1))!;
+    if (parts[0] === 'simulate' && parts[1] === 'rebase' && parts[2] === 'todo') return this.setRebaseTodo(parts.slice(3).join(' ').split(';').join('\n'));
+    if (parts[0] === 'gh' || parts[0] === 'simulate') return githubCommand(this.state, parts.slice(1), parts[0] === 'simulate');
+    if (parts[0] === 'ls') return { success: true, message: Object.keys(this.state.workingDirectory).sort().join('\n') };
     
     // 非Gitコマンドの処理
     if (parts[0] === 'touch') {
       const filename = parts[1];
       if (!filename) return { success: false, message: 'usage: touch <filename>' };
+      if (!inSparseScope(this.state, filename)) return { success: false, message: '先にsparse-checkoutの対象を広げてください。' };
       // touchのシミュレーション: 存在しない場合は作成、存在する場合はタイムスタンプ更新（内容は変更なし）
       if (this.state.workingDirectory[filename] === undefined) {
         this.touch(filename, '');
@@ -71,6 +109,7 @@ export class GitEngine {
       }
       
       const filename = parts[redirectIndex + 1];
+      if (!inSparseScope(this.state, filename)) return { success: false, message: '先にsparse-checkoutの対象を広げてください。' };
       // echo と > の間の部分を結合
       let content = parts.slice(1, redirectIndex).join(' ');
       
@@ -83,24 +122,57 @@ export class GitEngine {
       return { success: true, message: '', newState: this.state };
     }
 
+    if (parts[0] === 'rm') {
+      const path = parts[1];
+      if (!path || this.state.workingDirectory[path] === undefined) return { success: false, message: 'rm: file not found' };
+      delete this.state.workingDirectory[path];
+      return { success: true, message: '', newState: this.getState() };
+    }
+
     if (parts[0] !== 'git') {
       return { success: false, message: "Command must start with 'git', 'touch', or 'echo'" };
     }
 
     const cmd = parts[1];
     const args = parts.slice(2);
+    const advanced = advancedCommand(this.state, cmd, args);
+    if (advanced) return advanced;
 
     switch (cmd) {
       case 'init':
         return this.init();
+      case 'clone': {
+        const name = Object.keys(this.state.remotes).find(remote => this.state.remotes[remote] === args[0]);
+        const server = name ? this.state.mockServers[name] : undefined;
+        if (!server?.branches.main) return { success: false, message: '模擬環境に登録されたURLを指定してください。' };
+        const servers = JSON.parse(JSON.stringify(this.state.mockServers));
+        this.state = this.createInitialState();
+        this.state.remotes.origin = args[0];
+        this.state.mockServers = { ...servers, origin: JSON.parse(JSON.stringify(server)) };
+        this.fetch(['origin']);
+        this.state.branches.main = server.branches.main;
+        this.state.workingDirectory = { ...this.state.commits[server.branches.main].tree };
+        this.state.upstreams = { main: 'origin/main' };
+        return { success: true, message: 'Cloned mock repository.', newState: this.getState() };
+      }
       case 'add':
         return this.add(args);
       case 'commit':
         return this.commit(args);
       case 'status':
-        return this.status();
+        return this.status(args);
+      case 'blame':
+        return this.blame(args);
       case 'log':
-        return this.log();
+        return this.log(args);
+      case 'show':
+        return this.show(args);
+      case 'reflog':
+        return { success: true, message: (this.state.reflog ?? []).map((entry, i) => `${entry.id} HEAD@{${i}}: ${entry.command}`).join('\n') };
+      case 'tag':
+        return this.tag(args);
+      case 'config':
+        return this.configure(args);
       case 'reset':
         return this.reset(args);
       case 'stash':
@@ -128,6 +200,21 @@ export class GitEngine {
         return this.branch(args);
       case 'checkout':
         return this.checkout(args);
+      case 'switch':
+        if (args.includes('--track')) {
+          const ref = args[args.indexOf('--track') + 1];
+          const name = args.includes('-c') ? args[args.indexOf('-c') + 1] : ref?.split('/').slice(1).join('/');
+          if (!ref || !name || !this.state.remoteBranches[ref]) return { success: false, message: 'Fetch the remote branch, then specify --track <remote/branch>.' };
+          const result = this.checkout(['-b', name, ref]);
+          if (result.success) this.state.upstreams = { ...this.state.upstreams, [name]: ref };
+          return result;
+        }
+        return this.checkout(args[0] === '-c' ? ['-b', ...args.slice(1)] : args);
+      case 'restore':
+        return this.restore(args);
+      case 'rm':
+      case 'mv':
+        return this.fileOperation(cmd, args);
       default:
         return { success: false, message: `git: '${cmd}' is not a git command.` };
     }
@@ -156,35 +243,13 @@ export class GitEngine {
       }
     }
 
-    // ターゲットコミットIDの解決
-    let commitId = target;
-    if (target === 'HEAD') {
-      const headId = this.resolveHeadCommitId();
-      if (!headId) return { success: false, message: 'Failed to resolve HEAD' };
-      commitId = headId;
-    } else if (target.startsWith('HEAD~')) {
-      const n = parseInt(target.split('~')[1]);
-      let current = this.resolveHeadCommitId();
-      for (let i = 0; i < n; i++) {
-        if (!current) break;
-        current = this.state.commits[current].parents[0];
-      }
-      if (!current) return { success: false, message: `Commit ${target} not found` };
-      commitId = current;
-    } else {
-       // ブランチと生のコミットIDを確認
-       if (this.state.branches[target]) {
-         commitId = this.state.branches[target];
-       } else if (!this.state.commits[target]) {
-         const fullId = Object.keys(this.state.commits).find(id => id.startsWith(target));
-         if (fullId) commitId = fullId;
-         else return { success: false, message: `Commit ${target} not found` };
-       }
-    }
+    const commitId = resolveRevision(this.state, target);
+    if (!commitId) return { success: false, message: `Commit ${target} not found` };
 
     const targetCommit = this.state.commits[commitId];
     if (!targetCommit) return { success: false, message: `Commit ${commitId} not found` };
 
+    const originalIndex = indexTree(this.state);
     // HEADをターゲットコミットに移動
     if (this.state.HEAD.type === 'branch') {
       this.state.branches[this.state.HEAD.value] = commitId;
@@ -194,6 +259,12 @@ export class GitEngine {
 
     // モードに基づいてインデックスとワーキングディレクトリを更新
     if (mode === 'soft') {
+      this.state.index = {};
+      for (const path of new Set([...Object.keys(targetCommit.tree), ...Object.keys(originalIndex)])) {
+        this.state.index[path] = originalIndex[path] === undefined
+          ? { path, status: 'deleted' }
+          : { path, status: originalIndex[path] === targetCommit.tree[path] ? 'unmodified' : 'staged', content: originalIndex[path] };
+      }
       // Soft reset: HEADのみ移動、インデックスとWDは変更なし。
       // 新しいHEADとインデックスの間の変更は「ステージ済み」となる。
     } else if (mode === 'mixed') {
@@ -203,7 +274,8 @@ export class GitEngine {
     } else if (mode === 'hard') {
       // Hard reset: HEAD移動、インデックスとWDもHEADに合わせてリセット。
       this.state.index = {};
-      this.state.workingDirectory = { ...targetCommit.tree };
+      const untracked = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => originalIndex[path] === undefined && targetCommit.tree[path] === undefined));
+      this.state.workingDirectory = { ...targetCommit.tree, ...untracked };
     }
 
     return { success: true, message: `HEAD is now at ${commitId.substring(0,7)} ${targetCommit.message}`, newState: this.state };
@@ -214,233 +286,167 @@ export class GitEngine {
    * Supports push, pop, apply, list.
    */
   private stash(args: string[]): CommandResult {
-    const subcmd = args[0] || 'push'; // default to push
-    
-    if (subcmd === 'push' || subcmd === 'save') {
-      // ローカルの変更を確認
-      const hasChanges = Object.keys(this.state.index).length > 0 || 
-                         Object.keys(this.state.workingDirectory).some(f => !this.isFileInHead(f) || this.state.workingDirectory[f] !== this.getHeadContent(f));
-      
-      if (!hasChanges) return { success: false, message: 'No local changes to save' };
-
-      const stashId = Math.random().toString(36).substring(2, 7);
-      const message = args.length > 1 ? args.slice(1).join(' ') : `WIP on ${this.state.HEAD.type === 'branch' ? this.state.HEAD.value : 'detached'}: ${stashId}`;
-      
-      // 現在の状態をstashリストに保存
-      this.state.stash.push({
-        id: stashId,
-        message,
-        index: { ...this.state.index },
-        workingDirectory: { ...this.state.workingDirectory },
-        timestamp: Date.now()
-      });
-
-      // ワークスペースをクリーンにするためにHEADへHard reset
-      const headId = this.resolveHeadCommitId();
-      if (headId) {
-        const headCommit = this.state.commits[headId];
-        this.state.index = {};
-        this.state.workingDirectory = { ...headCommit.tree };
-      }
-
-      return { success: true, message: `Saved working directory and index state ${message}`, newState: this.state };
-    } else if (subcmd === 'pop' || subcmd === 'apply') {
-      if (this.state.stash.length === 0) return { success: false, message: 'No stash entries found.' };
-      
-      const entry = this.state.stash[this.state.stash.length - 1];
-      
-      // stashから状態を復元
-      this.state.index = { ...entry.index };
-      this.state.workingDirectory = { ...entry.workingDirectory };
-      
-      if (subcmd === 'pop') {
-        this.state.stash.pop();
-        return { success: true, message: `Dropped ${entry.message} and applied changes`, newState: this.state };
-      }
-      return { success: true, message: `Applied ${entry.message}`, newState: this.state };
-    } else if (subcmd === 'list') {
-      const list = this.state.stash.map((s, i) => `stash@{${this.state.stash.length - 1 - i}}: ${s.message}`).join('\n');
-      return { success: true, message: list || 'stash list is empty' };
-    }
-
-    return { success: false, message: `git stash: unknown subcommand ${subcmd}` };
-  }
-
-  /**
-   * Implements `git remote`.
-   * Supports add, remove, -v.
-   */
-  private remote(args: string[]): CommandResult {
-    const subcmd = args[0];
-    if (subcmd === 'add') {
-      const name = args[1];
-      const url = args[2];
-      if (!name || !url) return { success: false, message: 'usage: git remote add <name> <url>' };
-      this.state.remotes[name] = url;
-      // このリモート用のモックサーバーを初期化
-      if (!this.state.mockServers[name]) {
-        this.state.mockServers[name] = { branches: {}, commits: {} };
-      }
-      return { success: true, message: '', newState: this.state };
-    } else if (subcmd === 'remove' || subcmd === 'rm') {
-      const name = args[1];
-      if (this.state.remotes[name]) {
-        delete this.state.remotes[name];
-        return { success: true, message: '', newState: this.state };
-      }
-      return { success: false, message: `fatal: No such remote: '${name}'` };
-    } else if (!subcmd || subcmd === '-v') {
-      const list = Object.entries(this.state.remotes).map(([name, url]) => `${name}\t${url} (fetch)\n${name}\t${url} (push)`).join('\n');
-      return { success: true, message: list };
-    }
-    return { success: false, message: `git remote: unknown subcommand ${subcmd}` };
-  }
-
-  /**
-   * Implements `git push`.
-   * Pushes local commits to the remote mock server.
-   */
-  private push(args: string[]): CommandResult {
-    const remoteName = args[0] || 'origin';
-    let branchName = args[1];
-
-    // ブランチ名を決定
-    if (!branchName) {
-      if (this.state.HEAD.type === 'branch') {
-        branchName = this.state.HEAD.value;
-      } else {
-        return { success: false, message: 'fatal: You are not currently on a branch.' };
-      }
-    }
-
-    if (!this.state.remotes[remoteName]) {
-      return { success: false, message: `fatal: '${remoteName}' does not appear to be a git repository` };
-    }
-
-    const localCommitId = this.state.branches[branchName];
-    if (!localCommitId) {
-       return { success: false, message: `error: src refspec ${branchName} does not match any` };
-    }
-
-    // モックサーバーへコミットを「アップロード」
-    const server = this.state.mockServers[remoteName];
-    
-    // このブランチから到達可能なすべてのコミットを単純コピー
-    let currentId: string | undefined = localCommitId;
-    while (currentId && !server.commits[currentId]) {
-      const commit: Commit = this.state.commits[currentId];
-      if (!commit) break;
-      server.commits[currentId] = { ...commit }; // Copy commit data
-      currentId = commit.parents[0];
-    }
-
-    // サーバーのブランチポインタを更新
-    server.branches[branchName] = localCommitId;
-
-    // ローカルのリモート追跡ブランチを更新
-    this.state.remoteBranches[`${remoteName}/${branchName}`] = localCommitId;
-
-    return { success: true, message: `To ${this.state.remotes[remoteName]}\n   ${localCommitId.substring(0,7)}..${localCommitId.substring(0,7)}  ${branchName} -> ${branchName}`, newState: this.state };
-  }
-
-  /**
-   * Implements `git fetch`.
-   * Downloads commits and branches from the remote mock server.
-   */
-  private fetch(args: string[]): CommandResult {
-    const remoteName = args[0] || 'origin';
-    if (!this.state.remotes[remoteName]) {
-      return { success: false, message: `fatal: '${remoteName}' does not appear to be a git repository` };
-    }
-
-    const server = this.state.mockServers[remoteName];
-    if (!server) return { success: false, message: 'Internal error: mock server not found' };
-
-    // すべてのコミットとブランチを「ダウンロード」
-    let updated = false;
-    for (const [branch, commitId] of Object.entries(server.branches)) {
-      // 不足しているコミットでローカルのコミットデータベースを更新
-      let currentId: string | undefined = commitId;
-      while (currentId && !this.state.commits[currentId]) {
-        const commit: Commit = server.commits[currentId];
-        if (!commit) break;
-        this.state.commits[currentId] = { ...commit };
-        currentId = commit.parents[0];
-      }
-
-      // リモート追跡ブランチを更新
-      const remoteBranchName = `${remoteName}/${branch}`;
-      if (this.state.remoteBranches[remoteBranchName] !== commitId) {
-        this.state.remoteBranches[remoteBranchName] = commitId;
-        updated = true;
-      }
-    }
-
-    return { success: true, message: updated ? 'Fetched updates' : '', newState: this.state };
-  }
-
-  /**
-   * Implements `git pull`.
-   * Effectively runs `git fetch` followed by a fast-forward merge (simplified).
-   */
-  private pull(args: string[]): CommandResult {
-    const fetchResult = this.fetch(args);
-    if (!fetchResult.success) return fetchResult;
-
-    if (this.state.HEAD.type !== 'branch') {
-       return { success: false, message: 'You are not currently on a branch.' };
-    }
-    const currentBranch = this.state.HEAD.value;
-    const remoteName = args[0] || 'origin';
-    const remoteBranchName = `${remoteName}/${currentBranch}`;
-    
-    const mergeTargetId = this.state.remoteBranches[remoteBranchName];
-    if (!mergeTargetId) {
-      return { success: true, message: `Already up to date. (No tracking info for ${currentBranch})`, newState: this.state };
-    }
-
-    const currentHeadId = this.state.branches[currentBranch];
-    
-    if (currentHeadId === mergeTargetId) {
-       return { success: true, message: 'Already up to date.', newState: this.state };
-    }
-
-    // Fast-Forwardが可能か確認
-    let runner: string | undefined = mergeTargetId;
-    let isAncestor = false;
-    while (runner) {
-      if (runner === currentHeadId) {
-        isAncestor = true;
-        break;
-      }
-      runner = this.state.commits[runner]?.parents[0];
-    }
-
-    if (isAncestor || !currentHeadId) {
-      // Fast-forward
-      this.state.branches[currentBranch] = mergeTargetId;
-      // 新しいHEADに合わせてWD/Indexを更新
-      const newCommit = this.state.commits[mergeTargetId];
+    const action = args[0] ?? 'push';
+    const head = headTree(this.state);
+    if (action === 'push' || action === 'save') {
+      if (this.state.pendingMerge) return { success: false, message: 'Resolve or abort the merge first.' };
+      const includeUntracked = args.includes('-u') || args.includes('--include-untracked');
+      const effectiveIndex = indexTree(this.state);
+      const tracked = new Set([...Object.keys(head), ...Object.keys(effectiveIndex)]);
+      const hidden = Object.fromEntries(Object.entries(head).filter(([path]) => !inSparseScope(this.state, path)));
+      const shouldSave = (path: string) => tracked.has(path) || (includeUntracked && !isIgnored(this.state, path));
+      const saved = { ...hidden, ...Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => shouldSave(path))) };
+      const changed = !sameTree(head, effectiveIndex) || !sameTree(head, saved);
+      if (!changed) return { success: false, message: 'No local changes to save.' };
+      const at = args.indexOf('-m');
+      const message = at >= 0 ? args[at + 1] : action === 'save' ? args.slice(1).join(' ') : `WIP on ${this.state.HEAD.value}`;
+      this.state.stash.push({ id: Math.random().toString(36).slice(2, 9), message: message || 'WIP', baseTree: { ...head }, index: JSON.parse(JSON.stringify(this.state.index)), workingDirectory: saved, timestamp: Date.now() });
+      const preserved = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => !shouldSave(path)));
       this.state.index = {};
-      this.state.workingDirectory = { ...newCommit.tree };
-      
-      return { success: true, message: `Updating ${currentHeadId ? currentHeadId.substring(0,7) : 'null'}..${mergeTargetId.substring(0,7)}\nFast-forward`, newState: this.state };
-    } else {
-      return { success: false, message: 'fatal: Not possible to fast-forward, aborting. (Merge logic not fully implemented yet)' };
+      this.state.workingDirectory = { ...head, ...preserved };
+      return { success: true, message: 'Saved changes.', newState: this.getState() };
     }
+    if (action === 'list') return { success: true, message: [...this.state.stash].reverse().map((entry, i) => `stash@{${i}}: ${entry.message}`).join('\n') || 'stash list is empty' };
+    const reference = args.find(arg => arg.startsWith('stash@')) ?? 'stash@{0}';
+    const match = reference.match(/^stash@\{([0-9]+)\}$/);
+    const index = match ? this.state.stash.length - 1 - Number(match[1]) : -1;
+    const entry = this.state.stash[index];
+    if (!entry) return { success: false, message: 'Stash entry not found.' };
+    if (action === 'drop') {
+      this.state.stash.splice(index, 1);
+      return { success: true, message: 'Dropped stash.', newState: this.getState() };
+    }
+    const original = entry.baseTree ?? head;
+    if (action === 'show') {
+      let message = '';
+      for (const path of new Set([...Object.keys(original), ...Object.keys(entry.workingDirectory)])) if (original[path] !== entry.workingDirectory[path]) message += generateDiff(path, original[path] ?? '', entry.workingDirectory[path] ?? '');
+      return { success: true, message };
+    }
+    if (action !== 'pop' && action !== 'apply') return { success: false, message: 'Supported: stash push/list/show/apply/pop/drop' };
+    if (!cleanTrackedFiles(this.state)) return { success: false, message: 'Commit or stash current changes before applying.' };
+    const snapshot = (tree: Record<string, string>): Commit => ({ id: 'stash-snapshot', tree, parents: [], message: 'stash', author: 'User', changes: [], timestamp: 0 });
+    const hidden = Object.fromEntries(Object.entries(head).filter(([path]) => !inSparseScope(this.state, path)));
+    const merged = this.performThreeWayMerge(snapshot(original), snapshot({ ...hidden, ...this.state.workingDirectory }), snapshot(entry.workingDirectory));
+    this.state.workingDirectory = merged.tree;
+    if (merged.hasConflict) return { success: false, message: 'Stash conflict: resolve the files; the stash has been kept.', newState: this.getState() };
+    this.state.index = args.includes('--index') ? JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(entry.index).filter(([path, file]) => file.status === 'deleted' || file.content !== original[path])))) : {};
+    if (action === 'pop') this.state.stash.splice(index, 1);
+    return { success: true, message: 'Applied stash changes.', newState: this.getState() };
   }
 
-  /**
-   * Implements `git merge`.
-   * Handles Fast-forward and 3-way merges with conflict detection.
-   */
+  private remote(args: string[]): CommandResult {
+    const [action, name, value] = args;
+    if (!action || action === '-v') return { success: true, message: Object.entries(this.state.remotes).map(([name, url]) => `${name}\t${url} (fetch)\n${name}\t${url} (push)`).join('\n') };
+    if (action === 'add') {
+      if (!name || !value || this.state.remotes[name]) return { success: false, message: 'Specify a new remote name and URL.' };
+      this.state.remotes[name] = value;
+      this.state.mockServers[name] ??= { branches: {}, commits: {} };
+    } else if (action === 'set-url') {
+      if (!this.state.remotes[name] || !value) return { success: false, message: 'Remote not found or URL missing.' };
+      this.state.remotes[name] = value;
+    } else if (action === 'remove' || action === 'rm') {
+      if (!this.state.remotes[name]) return { success: false, message: 'Remote not found.' };
+      delete this.state.remotes[name];
+      for (const branch of Object.keys(this.state.remoteBranches)) if (branch.startsWith(name + '/')) delete this.state.remoteBranches[branch];
+      for (const branch of Object.keys(this.state.upstreams ?? {})) if (this.state.upstreams![branch].startsWith(name + '/')) delete this.state.upstreams![branch];
+    } else return { success: false, message: 'Supported: remote add/remove/set-url/-v' };
+    return { success: true, message: '', newState: this.getState() };
+  }
+
+  private push(args: string[]): CommandResult {
+    const setUpstream = args.includes('-u') || args.includes('--set-upstream');
+    const force = args.includes('--force');
+    const lease = args.includes('--force-with-lease');
+    const positional = args.filter(arg => !arg.startsWith('-'));
+    const current = this.state.HEAD.type === 'branch' ? this.state.HEAD.value : undefined;
+    const tracking = current ? this.state.upstreams?.[current]?.split('/') : undefined;
+    const remoteName = positional[0] ?? tracking?.[0] ?? 'origin';
+    const branch = positional[1] ?? (tracking ? tracking.slice(1).join('/') : current);
+    const server = this.state.mockServers[remoteName];
+    if (!server || !this.state.remotes[remoteName]) return { success: false, message: `Unknown remote: ${remoteName}` };
+    if (args.includes('--tags') || (branch && this.state.tags?.[branch] && !this.state.branches[branch])) {
+      const tags = args.includes('--tags') ? Object.entries(this.state.tags ?? {}) : [[branch!, this.state.tags![branch!]]] as [string, { commitId: string; message?: string }][];
+      server.tags ??= {};
+      if (tags.some(([name, tag]) => server.tags![name] && server.tags![name].commitId !== tag.commitId && !force)) return { success: false, message: 'Remote tag already exists.' };
+      for (const [name, tag] of tags) { copyHistory(this.state.commits, server.commits, tag.commitId); server.tags[name] = { ...tag }; }
+      return { success: true, message: 'Pushed tags to mock remote.', newState: this.getState() };
+    }
+    if (args.includes('--delete')) {
+      if (!branch || !server.branches[branch] || (branch === 'main' && this.state.github)) return { success: false, message: 'Cannot delete this remote branch.' };
+      delete server.branches[branch];
+      delete this.state.remoteBranches[`${remoteName}/${branch}`];
+      return { success: true, message: 'Deleted mock remote branch.', newState: this.getState() };
+    }
+    if (!branch || !this.state.branches[branch]) return { success: false, message: 'Specify a valid local branch.' };
+    if (this.state.github && branch === 'main' && (this.state.github.requireReview || this.state.github.requireCI)) return { success: false, message: 'Protected branch: use a reviewed PR with passing CI.' };
+    const localId = this.state.branches[branch];
+    const remoteId = server.branches[branch];
+    if (lease && remoteId !== this.state.remoteBranches[`${remoteName}/${branch}`]) return { success: false, message: 'Rejected: stale info (force-with-lease). Fetch and inspect teammate changes.' };
+    const commits = { ...server.commits, ...this.state.commits };
+    if (remoteId && !isAncestor(commits, remoteId, localId) && !force && !lease) return { success: false, message: 'Rejected (non-fast-forward). Fetch and integrate remote changes first.' };
+    copyHistory(this.state.commits, server.commits, localId);
+    server.branches[branch] = localId;
+    this.state.remoteBranches[`${remoteName}/${branch}`] = localId;
+    if (setUpstream) this.state.upstreams = { ...this.state.upstreams, [branch]: `${remoteName}/${branch}` };
+    return { success: true, message: `To ${this.state.remotes[remoteName]}\n${branch} -> ${branch}`, newState: this.getState() };
+  }
+
+  private fetch(args: string[]): CommandResult {
+    const remoteName = args.find(arg => !arg.startsWith('-')) ?? 'origin';
+    const server = this.state.mockServers[remoteName];
+    if (!server || !this.state.remotes[remoteName]) return { success: false, message: `Unknown remote: ${remoteName}` };
+    for (const [branch, id] of Object.entries(server.branches)) {
+      copyHistory(server.commits, this.state.commits, id);
+      this.state.remoteBranches[`${remoteName}/${branch}`] = id;
+    }
+    for (const [name, tag] of Object.entries(server.tags ?? {})) {
+      copyHistory(server.commits, this.state.commits, tag.commitId);
+      this.state.tags ??= {};
+      this.state.tags[name] ??= { ...tag };
+    }
+    if (args.includes('--prune')) {
+      for (const name of Object.keys(this.state.remoteBranches)) {
+        if (name.startsWith(remoteName + '/') && !server.branches[name.slice(remoteName.length + 1)]) delete this.state.remoteBranches[name];
+      }
+    }
+    return { success: true, message: 'Fetched remote history; local branches and working files are unchanged.', newState: this.getState() };
+  }
+
+  private pull(args: string[]): CommandResult {
+    if (this.state.HEAD.type !== 'branch') return { success: false, message: 'Switch to a branch first.' };
+    if (!cleanTrackedFiles(this.state)) return { success: false, message: 'Commit or stash local changes before pulling.' };
+    const branch = this.state.HEAD.value;
+    const positional = args.filter(arg => !arg.startsWith('-'));
+    const tracking = this.state.upstreams?.[branch]?.split('/');
+    const remote = positional[0] ?? tracking?.[0] ?? 'origin';
+    const target = positional[1] ?? (tracking ? tracking.slice(1).join('/') : branch);
+    const fetched = this.fetch([remote]);
+    if (!fetched.success) return fetched;
+    const ref = `${remote}/${target}`;
+    const id = this.state.remoteBranches[ref];
+    if (!id) return { success: false, message: 'Remote branch not found.', newState: this.getState() };
+    if (args.includes('--ff-only') && !isAncestor(this.state.commits, this.state.branches[branch], id) && !isAncestor(this.state.commits, id, this.state.branches[branch])) return { success: false, message: 'Not possible to fast-forward.', newState: this.getState() };
+    const result = args.includes('--rebase') ? this.rebase([ref]) : this.merge([ref]);
+    return { ...result, newState: this.getState() };
+  }
+
   private merge(args: string[]): CommandResult {
+    if (args[0] === '--abort') {
+      const pending = this.state.pendingMerge;
+      if (!pending) return { success: false, message: 'No merge in progress.' };
+      this.state.workingDirectory = pending.workingDirectory;
+      this.state.index = pending.index;
+      delete this.state.pendingMerge;
+      return { success: true, message: 'Merge aborted.', newState: this.getState() };
+    }
+    if (this.state.pendingMerge || this.state.operation) return { success: false, message: 'Complete or abort the current operation first.' };
+    if (!cleanTrackedFiles(this.state)) return { success: false, message: 'Commit or stash local changes before merging.' };
     if (args.length === 0) {
       return { success: false, message: 'fatal: No branch specified' };
     }
 
-    const targetBranchName = args[0];
-    const targetCommitId = this.state.branches[targetBranchName];
+    const targetBranchName = args.find(arg => !arg.startsWith('-')) ?? '';
+    const targetCommitId = resolveRevision(this.state, targetBranchName);
 
     if (!targetCommitId) {
       return { success: false, message: `fatal: '${targetBranchName}' does not point to a valid commit` };
@@ -461,7 +467,9 @@ export class GitEngine {
       return { success: false, message: 'fatal: refusing to merge unrelated histories' };
     }
 
-    if (mergeBaseId === currentHeadId) {
+    if (mergeBaseId === currentHeadId && !args.includes('--no-ff')) {
+      const untracked = untrackedFiles(this.state);
+      if (Object.keys(untracked).some(path => this.state.commits[targetCommitId].tree[path] !== undefined)) return { success: false, message: 'Untracked files would be overwritten.' };
       // Fast-forwardマージ
       if (this.state.HEAD.type === 'branch') {
         this.state.branches[this.state.HEAD.value] = targetCommitId;
@@ -472,13 +480,14 @@ export class GitEngine {
       // WD/Indexを更新
       const newCommit = this.state.commits[targetCommitId];
       this.state.index = {};
-      this.state.workingDirectory = { ...newCommit.tree };
+      this.state.workingDirectory = { ...newCommit.tree, ...untracked };
       
       return { success: true, message: `Updating ${currentHeadId.substring(0,7)}..${targetCommitId.substring(0,7)}\nFast-forward`, newState: this.state };
     } else if (mergeBaseId === targetCommitId) {
       return { success: true, message: 'Already up to date.' };
     }
 
+    if (args.includes('--ff-only')) return { success: false, message: 'Not possible to fast-forward.' };
     // 3-wayマージロジック
     const baseCommit = this.state.commits[mergeBaseId];
     const currentCommit = this.state.commits[currentHeadId];
@@ -526,9 +535,16 @@ export class GitEngine {
       }
     }
 
-    this.state.workingDirectory = newWD;
+    for (const file of allFiles) {
+      if (newWD[file] === undefined && currentCommit.tree[file] !== undefined) newIndex[file] = { path: file, status: 'deleted' };
+    }
+    const untracked = untrackedFiles(this.state);
+    if (Object.keys(untracked).some(path => newWD[path] !== undefined)) return { success: false, message: 'Untracked files would be overwritten.' };
+    const beforeMerge = { targetId: targetCommitId, workingDirectory: { ...this.state.workingDirectory }, index: { ...this.state.index } };
+    this.state.workingDirectory = { ...newWD, ...untracked };
     
     if (hasConflict) {
+      this.state.pendingMerge = beforeMerge;
       this.state.index = newIndex; // コンフリクトしていないファイルをステージ
       return { success: false, message: 'Automatic merge failed; fix conflicts and then commit the result.', newState: this.state };
     } else {
@@ -598,141 +614,159 @@ export class GitEngine {
   }
 
   private init(): CommandResult {
-    this.state = this.createInitialState();
-    return { success: true, message: 'Initialized empty Git repository', newState: this.state };
+    return { success: true, message: Object.keys(this.state.commits).length ? 'Reinitialized existing Git repository' : 'Initialized empty Git repository', newState: this.getState() };
   }
 
   private add(args: string[]): CommandResult {
-    if (args.length === 0) {
-      return { success: false, message: 'Nothing specified, nothing added.' };
+    if (args.includes('-p') || args.includes('--patch')) return this.startPatch(args.filter(arg => !arg.startsWith('-'))[0]);
+    if (!args.length) return { success: false, message: 'Nothing specified, nothing added.' };
+    const head = headTree(this.state);
+    const paths = args.includes('.') || args.includes('-A')
+      ? [...new Set([...Object.keys(head), ...Object.keys(this.state.workingDirectory), ...Object.keys(this.state.index)])]
+      : args.filter(arg => arg !== '-f');
+    const visiblePaths = paths.filter(path => inSparseScope(this.state, path) && (args.includes('-f') || !isIgnored(this.state, path)));
+    if (!args.includes('.') && !args.includes('-A') && visiblePaths.length !== paths.length) return { success: false, message: 'Ignored or excluded file. Use git add -f for ignored files, or expand sparse-checkout.' };
+    if (paths.some(path => this.state.workingDirectory[path] === undefined && head[path] === undefined && !this.state.index[path])) {
+      return { success: false, message: 'pathspec did not match any files' };
     }
-
-    const path = args[0];
-    
-    if (path === '.') {
-      // すべての変更をステージ
-      for (const [filePath, content] of Object.entries(this.state.workingDirectory)) {
-        this.state.index[filePath] = { path: filePath, status: 'staged', content };
-      }
-    } else {
-      if (!(path in this.state.workingDirectory)) {
-         return { success: false, message: `pathspec '${path}' did not match any files` };
-      }
-      this.state.index[path] = { path, status: 'staged', content: this.state.workingDirectory[path] };
+    for (const path of visiblePaths) {
+      const content = this.state.workingDirectory[path];
+      this.state.index[path] = content === undefined
+        ? { path, status: 'deleted' }
+        : { path, status: content === head[path] ? 'unmodified' : 'staged', content };
     }
-
-    return { success: true, message: '', newState: this.state };
+    return { success: true, message: '', newState: this.getState() };
   }
 
   private commit(args: string[]): CommandResult {
     const msgIndex = args.indexOf('-m');
-    if (msgIndex === -1 || msgIndex + 1 >= args.length) {
-      return { success: false, message: 'Aborting commit due to empty commit message.' };
-    }
-    
-    let message = args.slice(msgIndex + 1).join(' ');
-    if (message.startsWith('"') && message.endsWith('"')) {
-      message = message.slice(1, -1);
-    }
-
-    const stagedFiles = Object.values(this.state.index);
-    if (stagedFiles.length === 0) {
-      return { success: false, message: 'nothing to commit, working tree clean' };
-    }
-
+    const amend = args.includes('--amend');
     const parentId = this.resolveHeadCommitId();
+    const previous = parentId ? this.state.commits[parentId] : undefined;
+    const message = msgIndex >= 0 ? args[msgIndex + 1] : amend && args.includes('--no-edit') ? previous?.message : undefined;
+    if (!message) return { success: false, message: 'Specify a message using -m, or --amend --no-edit.' };
+    if (amend && !previous) return { success: false, message: 'No commit to amend.' };
+    const newTree = indexTree(this.state);
+    if (this.state.pendingMerge && (Object.values(this.state.workingDirectory).some(content => content.includes('<<<<<<< HEAD')) ||
+      [...new Set([...Object.keys(newTree), ...Object.keys(headTree(this.state))])].filter(path => inSparseScope(this.state, path)).some(path => newTree[path] !== this.state.workingDirectory[path]))) {
+      return { success: false, message: 'Resolve and stage all merge changes first.' };
+    }
+    if (!amend && !this.state.pendingMerge && sameTree(newTree, headTree(this.state))) return { success: false, message: 'nothing to commit' };
+    if (Object.values(newTree).some(content => content.includes('<<<<<<< HEAD'))) return { success: false, message: 'Resolve and stage all conflicts first.' };
     const commitId = Math.random().toString(36).substring(2, 9);
-    
-    const parentCommit = parentId ? this.state.commits[parentId] : null;
-    const newTree = parentCommit ? { ...parentCommit.tree } : {};
-    
-    stagedFiles.forEach(file => {
-      if (file.content !== undefined) {
-        newTree[file.path] = file.content;
-      }
-    });
-
-    const newCommit: Commit = {
-      id: commitId,
-      message,
-      parents: parentId ? [parentId] : [],
-      timestamp: Date.now(),
-      author: 'User',
-      changes: stagedFiles,
-      tree: newTree
+    this.state.commits[commitId] = {
+      id: commitId, message,
+      parents: this.state.pendingMerge && parentId ? [parentId, this.state.pendingMerge.targetId] : amend ? previous!.parents : parentId ? [parentId] : [],
+      timestamp: Date.now(), author: this.state.config?.['user.name'] ?? 'User',
+      changes: Object.values(this.state.index).filter(entry => entry.status !== 'unmodified'), tree: newTree
     };
-
-    this.state.commits[commitId] = newCommit;
-    
-    if (this.state.HEAD.type === 'branch') {
-      const branchName = this.state.HEAD.value;
-      this.state.branches[branchName] = commitId;
-    } else {
-      this.state.HEAD.value = commitId;
-      this.state.detachedHead = true;
-    }
-
-    // Update index: mark staged files as unmodified, keep them in index
-    // In a real git, index matches the commit tree.
-    // We should keep all files that are in the new tree in the index.
+    if (this.state.HEAD.type === 'branch') this.state.branches[this.state.HEAD.value] = commitId;
+    else this.state.HEAD.value = commitId;
     this.state.index = {};
-    for (const [path, content] of Object.entries(newTree)) {
-      this.state.index[path] = { path, status: 'unmodified', content };
-    }
-
-    return { 
-      success: true, 
-      message: `[${this.state.HEAD.type === 'branch' ? this.state.HEAD.value : 'detached'}] ${message}`, 
-      newState: this.state 
-    };
+    delete this.state.pendingMerge;
+    return { success: true, message: `[${this.state.HEAD.value}] ${message}`, newState: this.getState() };
   }
 
-  private status(): CommandResult {
-    const staged = Object.keys(this.state.index);
-    const untracked = Object.keys(this.state.workingDirectory).filter(f => !this.state.index[f] && !this.isFileInHead(f));
-    
-    let output = '';
-    if (this.state.HEAD.type === 'branch') {
-      output += `On branch ${this.state.HEAD.value}\n`;
-    } else {
-      output += `HEAD detached at ${this.state.HEAD.value}\n`;
-    }
-
-    if (staged.length === 0 && untracked.length === 0) {
-      output += 'nothing to commit, working tree clean';
-    } else {
-      if (staged.length > 0) {
-        output += 'Changes to be committed:\n' + staged.map(f => `  ${f}`).join('\n') + '\n';
-      }
-      if (untracked.length > 0) {
-        output += 'Untracked files:\n' + untracked.map(f => `  ${f}`).join('\n');
-      }
-    }
-
-    return { success: true, message: output };
+  private status(args: string[] = []): CommandResult {
+    const head = headTree(this.state);
+    const index = indexTree(this.state);
+    const working = this.state.workingDirectory;
+    const paths = [...new Set([...Object.keys(head), ...Object.keys(index), ...Object.keys(working)])].filter(path => inSparseScope(this.state, path));
+    const staged = paths.filter(path => head[path] !== index[path]);
+    const modified = paths.filter(path => index[path] !== undefined && index[path] !== working[path]);
+    const untracked = paths.filter(path => index[path] === undefined && working[path] !== undefined && !isIgnored(this.state, path));
+    const ignored = paths.filter(path => index[path] === undefined && working[path] !== undefined && isIgnored(this.state, path));
+    const lines = [this.state.HEAD.type === 'branch' ? `On branch ${this.state.HEAD.value}` : `HEAD detached at ${this.state.HEAD.value}`];
+    if (staged.length) lines.push('Changes to be committed:', ...staged.map(path => `  ${index[path] === undefined ? 'deleted' : 'staged'}: ${path}`));
+    if (modified.length) lines.push('Changes not staged for commit:', ...modified.map(path => `  ${working[path] === undefined ? 'deleted' : 'modified'}: ${path}`));
+    if (untracked.length) lines.push('Untracked files:', ...untracked.map(path => `  ${path}`));
+    if (args.includes('--ignored') && ignored.length) lines.push('Ignored files:', ...ignored.map(path => `  ${path}`));
+    if (!staged.length && !modified.length && !untracked.length) lines.push('nothing to commit, working tree clean');
+    return { success: true, message: lines.join('\n') };
   }
 
-  private log(): CommandResult {
-    let currentCommitId = this.resolveHeadCommitId();
+  private log(args: string[] = []): CommandResult {
+    const currentCommitId = this.resolveHeadCommitId();
     if (!currentCommitId) {
       return { success: false, message: "fatal: your current branch 'main' does not have any commits yet" };
     }
 
-    let output = '';
-    while (currentCommitId) {
-      const commit: Commit = this.state.commits[currentCommitId];
-      if (!commit) break;
-      output += `commit ${commit.id}\nAuthor: ${commit.author}\nDate: ${new Date(commit.timestamp).toISOString()}\n\n    ${commit.message}\n\n`;
-      currentCommitId = commit.parents[0];
+    const ids: string[] = [];
+    const pending = args.includes('--all') ? Object.values(this.state.branches).concat(Object.values(this.state.remoteBranches)) : [currentCommitId];
+    const seen = new Set<string>();
+    while (pending.length) {
+      const id = pending.shift()!;
+      const commit = this.state.commits[id];
+      if (!commit || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+      pending.push(...commit.parents);
     }
+    const separator = args.indexOf('--');
+    const file = separator >= 0 ? args[separator + 1] : undefined;
+    const grep = args.indexOf('--grep');
+    const selected = ids.filter(id => {
+      const commit = this.state.commits[id];
+      if (grep >= 0 && !commit.message.includes(args[grep + 1] ?? '')) return false;
+      if (file) return commit.tree[file] !== this.state.commits[commit.parents[0]]?.tree[file];
+      return true;
+    });
+    const output = selected.map(id => {
+      const commit = this.state.commits[id];
+      const graph = args.includes('--graph') ? `* [${commit.parents.join(', ')}] ` : '';
+      return args.includes('--oneline') ? `${graph}${id} ${commit.message}` : `${graph}commit ${id}\nAuthor: ${commit.author}\nDate: ${new Date(commit.timestamp).toISOString()}\n\n    ${commit.message}`;
+    });
+    return { success: true, message: output.join('\n\n') };
+  }
 
-    return { success: true, message: output.trim() };
+  private configure(args: string[]): CommandResult {
+    const values = args.filter(arg => !['--global', '--local'].includes(arg));
+    this.state.config ??= {};
+    if (values[0] === '--list') return { success: true, message: Object.entries(this.state.config).map(([key, value]) => `${key}=${value}`).join('\n') };
+    const [key, value] = values;
+    if (!key) return { success: false, message: 'git config <key> [value]' };
+    if (value === undefined) return this.state.config[key] === undefined ? { success: false, message: 'Setting not found.' } : { success: true, message: this.state.config[key] };
+    this.state.config[key] = value;
+    return { success: true, message: '設定をこの模擬リポジトリに保存しました。', newState: this.getState() };
+  }
+
+  private tag(args: string[]): CommandResult {
+    this.state.tags ??= {};
+    if (!args.length) return { success: true, message: Object.keys(this.state.tags).sort().join('\n') };
+    if (args[0] === '-d') {
+      if (!this.state.tags[args[1]]) return { success: false, message: 'Tag not found.' };
+      delete this.state.tags[args[1]];
+      return { success: true, message: 'Deleted tag.', newState: this.getState() };
+    }
+    const annotated = args[0] === '-a';
+    const name = annotated ? args[1] : args[0];
+    const messageAt = args.indexOf('-m');
+    const target = args[annotated ? 2 : 1];
+    const id = resolveRevision(this.state, target && !target.startsWith('-') ? target : 'HEAD');
+    if (!name || !id || this.state.tags[name]) return { success: false, message: 'Specify a new tag and a valid commit.' };
+    if (annotated && (messageAt < 0 || !args[messageAt + 1])) return { success: false, message: 'Annotated tags require -m.' };
+    this.state.tags[name] = { commitId: id, ...(annotated ? { message: args[messageAt + 1] } : {}) };
+    return { success: true, message: '', newState: this.getState() };
+  }
+
+  private show(args: string[]): CommandResult {
+    const value = args[0] ?? 'HEAD';
+    const [reference, path] = value.split(':');
+    const id = resolveRevision(this.state, reference);
+    if (!id) return { success: false, message: 'Commit not found.' };
+    const commit = this.state.commits[id];
+    if (path) return commit.tree[path] === undefined ? { success: false, message: 'File not found.' } : { success: true, message: commit.tree[path] };
+    const parent = this.state.commits[commit.parents[0]]?.tree ?? {};
+    let message = `commit ${id}\n${commit.message}\n`;
+    if (this.state.tags?.[reference]?.message) message = `tag ${reference}\n${this.state.tags[reference].message}\n` + message;
+    for (const file of new Set([...Object.keys(parent), ...Object.keys(commit.tree)])) if (parent[file] !== commit.tree[file]) message += generateDiff(file, parent[file] ?? '', commit.tree[file] ?? '');
+    return { success: true, message };
   }
 
   private isFileInHead(path: string): boolean {
     const headId = this.resolveHeadCommitId();
     if (!headId) return false;
-    return !!this.state.commits[headId].tree[path];
+    return this.state.commits[headId].tree[path] !== undefined;
   }
 
   private resolveHeadCommitId(): string | null {
@@ -751,26 +785,39 @@ export class GitEngine {
   }
 
   private branch(args: string[]): CommandResult {
-    if (args.length === 0) {
-      const current = this.state.HEAD.type === 'branch' ? this.state.HEAD.value : '';
-      const list = Object.keys(this.state.branches).map(b => 
-        (b === current ? '* ' : '  ') + b
-      ).join('\n');
-      return { success: true, message: list };
+    const current = this.state.HEAD.type === 'branch' ? this.state.HEAD.value : '';
+    if (!args.length || args[0] === '-a') {
+      const local = Object.keys(this.state.branches).map(name => `${name === current ? '* ' : '  '}${name}`);
+      if (args[0] === '-a') local.push(...Object.keys(this.state.remoteBranches).map(name => `  remotes/${name}`));
+      return { success: true, message: local.join('\n') };
     }
-
-    const branchName = args[0];
-    if (this.state.branches[branchName]) {
-      return { success: false, message: `fatal: A branch named '${branchName}' already exists.` };
+    if (args[0] === '-m') {
+      const oldName = args.length > 2 ? args[1] : current;
+      const name = args.length > 2 ? args[2] : args[1];
+      if (!name || !this.state.branches[oldName] || name in this.state.branches) return { success: false, message: 'Specify an existing branch and a new name.' };
+      this.state.branches[name] = this.state.branches[oldName];
+      delete this.state.branches[oldName];
+      if (current === oldName) this.state.HEAD.value = name;
+      for (const tree of Object.values(this.state.worktrees ?? {})) if (tree.branch === oldName) tree.branch = name;
+      if (this.state.upstreams?.[oldName]) { this.state.upstreams[name] = this.state.upstreams[oldName]; delete this.state.upstreams[oldName]; }
+      return { success: true, message: 'Renamed branch.', newState: this.getState() };
     }
-
-    const headId = this.resolveHeadCommitId();
-    if (!headId) {
-      return { success: false, message: 'fatal: Not a valid object name: \'master\'.' };
+    if (args[0] === '-d' || args[0] === '-D') {
+      const name = args[1];
+      if (!name || !this.state.branches[name] || name === current) return { success: false, message: 'Cannot delete this branch.' };
+      if (Object.values(this.state.worktrees ?? {}).some(tree => tree.branch === name)) return { success: false, message: 'Branch is checked out in a worktree.' };
+      const target = this.state.upstreams?.[name];
+      const mergedInto = target ? this.state.remoteBranches[target] : this.resolveHeadCommitId();
+      if (args[0] === '-d' && (!mergedInto || !isAncestor(this.state.commits, this.state.branches[name], mergedInto))) return { success: false, message: 'Branch is not fully merged.' };
+      delete this.state.branches[name];
+      if (this.state.upstreams) delete this.state.upstreams[name];
+      return { success: true, message: 'Deleted branch.', newState: this.getState() };
     }
-
-    this.state.branches[branchName] = headId;
-    return { success: true, message: '', newState: this.state };
+    const name = args[0];
+    const id = resolveRevision(this.state, args[1] ?? 'HEAD');
+    if (!id || name.startsWith('-') || name in this.state.branches) return { success: false, message: 'Specify a new branch and a valid start point.' };
+    this.state.branches[name] = id;
+    return { success: true, message: '', newState: this.getState() };
   }
 
   private checkout(args: string[]): CommandResult {
@@ -780,39 +827,72 @@ export class GitEngine {
 
     let target = args[0];
     let createBranch = false;
+    const detached = target === '--detach';
+    if (detached) target = args[1] ?? 'HEAD';
 
     if (target === '-b') {
       createBranch = true;
       target = args[1];
     }
 
+    if (this.state.pendingMerge || this.state.operation) return { success: false, message: 'Complete or abort the current operation first.' };
+    if (createBranch && !target) return { success: false, message: 'Specify a branch name.' };
     if (createBranch) {
-      const branchRes = this.branch([target]);
+      const branchRes = this.branch([target, args[2] ?? 'HEAD']);
       if (!branchRes.success) return branchRes;
     }
 
+    const targetId = resolveRevision(this.state, target);
+    if (!detached && Object.entries(this.state.worktrees ?? {}).some(([path, tree]) => path !== this.state.activeWorktree && tree.branch === target)) return { success: false, message: 'Branch is already checked out in another worktree.' };
+    const targetTree = targetId ? this.state.commits[targetId]?.tree : undefined;
+    const previousTree = headTree(this.state);
+    const currentIndex = indexTree(this.state);
+    if (targetTree) {
+      const paths = new Set([...Object.keys(previousTree), ...Object.keys(currentIndex), ...Object.keys(this.state.workingDirectory), ...Object.keys(targetTree)]);
+      for (const path of paths) {
+        if (!inSparseScope(this.state, path)) continue;
+        const locallyChanged = currentIndex[path] !== previousTree[path] || this.state.workingDirectory[path] !== currentIndex[path];
+        if (locallyChanged && targetTree[path] !== previousTree[path]) {
+          return { success: false, message: `Local changes would be overwritten: ${path}` };
+        }
+      }
+    }
+    const preserved = { ...this.state.workingDirectory };
+    const preservedIndex = { ...this.state.index };
+    const carryChanges = (tree: Record<string, string>) => {
+      this.state.workingDirectory = { ...tree };
+      this.state.index = {};
+      for (const path of new Set([...Object.keys(previousTree), ...Object.keys(currentIndex), ...Object.keys(preserved)])) {
+        if (!inSparseScope(this.state, path)) continue;
+        if (currentIndex[path] !== previousTree[path] || preserved[path] !== currentIndex[path]) {
+          if (preserved[path] === undefined) delete this.state.workingDirectory[path];
+          else this.state.workingDirectory[path] = preserved[path];
+          if (preservedIndex[path]) this.state.index[path] = preservedIndex[path];
+        }
+      }
+    };
     // Switch to branch
-    if (this.state.branches[target]) {
+    if (!detached && this.state.branches[target]) {
       this.state.HEAD = { type: 'branch', value: target };
+      this.state.detachedHead = false;
       
       // Update WD/Index to match new HEAD (simplified: just reset index, keep WD changes if safe? 
       // For this sim, let's just load the tree of the commit)
       const commitId = this.state.branches[target];
       const commit = this.state.commits[commitId];
       if (commit) {
-        this.state.index = {};
-        this.state.workingDirectory = { ...commit.tree };
+        carryChanges(commit.tree);
       }
       
       return { success: true, message: `Switched to branch '${target}'`, newState: this.state };
     }
 
     // Detached HEAD (commit ID)
-    if (this.state.commits[target]) {
-      this.state.HEAD = { type: 'commit', value: target };
-      const commit = this.state.commits[target];
-      this.state.index = {};
-      this.state.workingDirectory = { ...commit.tree };
+    if (targetId && this.state.commits[targetId]) {
+      this.state.HEAD = { type: 'commit', value: targetId };
+      this.state.detachedHead = true;
+      const commit = this.state.commits[targetId];
+      carryChanges(commit.tree);
       return { success: true, message: `Note: switching to '${target}'.\n\nYou are in 'detached HEAD' state.`, newState: this.state };
     }
 
@@ -822,317 +902,270 @@ export class GitEngine {
    * Implements `git diff`.
    */
   private diff(args: string[]): CommandResult {
-    const isCached = args.includes('--cached') || args.includes('--staged');
+    const cached = args.includes('--cached') || args.includes('--staged');
+    const separator = args.indexOf('--');
+    const revisions = (separator < 0 ? args : args.slice(0, separator)).filter(arg => !arg.startsWith('-'));
+    const files = separator < 0 ? [] : args.slice(separator + 1);
+    if (revisions.length > 2 || (cached && revisions.length)) return { success: false, message: 'Use diff [commit [commit]] -- [path], or diff --staged.' };
+    let left = cached ? headTree(this.state) : indexTree(this.state);
+    let right = cached ? indexTree(this.state) : this.state.workingDirectory;
+    if (revisions.length) {
+      const ids = revisions.map(value => resolveRevision(this.state, value));
+      if (ids.some(id => !id)) return { success: false, message: 'Revision not found.' };
+      left = this.state.commits[ids[0]!].tree;
+      if (ids[1]) right = this.state.commits[ids[1]].tree;
+    }
+    const paths = cached || revisions.length ? new Set([...Object.keys(left), ...Object.keys(right)]) : new Set(Object.keys(left));
     let output = '';
+    for (const path of paths) {
+      if (!cached && !revisions.length && !inSparseScope(this.state, path)) continue;
+      if (files.length && !files.some(file => path === file || path.startsWith(file + '/'))) continue;
+      if (left[path] !== right[path]) output += args.includes('--name-only') ? path + '\n' : generateDiff(path, left[path] ?? '', right[path] ?? '');
+    }
+    return { success: true, message: output };
+  }
 
-    if (isCached) {
-      // Index vs HEAD
-      const headId = this.resolveHeadCommitId();
-      if (!headId) {
-        // No commits yet, compare index to empty
-        // Basically everything in index is an addition
-        for (const [path, fileChange] of Object.entries(this.state.index)) {
-          const content = fileChange.content || '';
-          output += generateDiff(path, '', content);
-        }
-      } else {
-        const headCommit = this.state.commits[headId];
-        const headTree = headCommit.tree;
-
-        // Files in Index
-        for (const [path, fileChange] of Object.entries(this.state.index)) {
-          const indexContent = fileChange.content || '';
-          const headContent = headTree[path] || '';
-          if (indexContent !== headContent) {
-            output += generateDiff(path, headContent, indexContent);
-          }
-        }
-
-        // Files in HEAD but not in Index (deleted)
-        for (const [path, headContent] of Object.entries(headTree)) {
-          if (this.state.index[path] === undefined) {
-             output += generateDiff(path, headContent, '');
-          }
-        }
-      }
-    } else {
-      // Working Directory vs Index
-      // Only tracked files (in index) are considered for diff
-      for (const [path, fileChange] of Object.entries(this.state.index)) {
-        const indexContent = fileChange.content || '';
-        const workContent = this.state.workingDirectory[path];
-        
-        // If file is missing in working directory but present in index -> deleted
-        if (workContent === undefined) {
-          output += generateDiff(path, indexContent, '');
-        } else if (workContent !== indexContent) {
-          // Modified
-          output += generateDiff(path, indexContent, workContent);
-        }
+  private startPatch(path?: string): CommandResult {
+    const index = indexTree(this.state);
+    path ??= Object.keys(index).find(file => inSparseScope(this.state, file) && index[file] !== this.state.workingDirectory[file]);
+    if (!path || index[path] === undefined || this.state.workingDirectory[path] === undefined) return { success: false, message: '変更した追跡ファイルを一つ指定してください。' };
+    if (this.state.workingDirectory[path].includes('<<<<<<< HEAD')) return { success: false, message: '先に競合マーカーを解消してください。' };
+    const chunks: NonNullable<GitState['patchSession']>['chunks'] = [];
+    for (const part of diffLines(index[path], this.state.workingDirectory[path])) {
+      if (!part.added && !part.removed) chunks.push({ before: part.value, after: part.value, changed: false });
+      else {
+        let chunk = chunks.at(-1);
+        if (!chunk?.changed) { chunk = { before: '', after: '', changed: true }; chunks.push(chunk); }
+        if (part.removed) chunk.before += part.value;
+        if (part.added) chunk.after += part.value;
       }
     }
+    const cursor = chunks.findIndex(chunk => chunk.changed);
+    if (cursor < 0) return { success: false, message: 'No changes.' };
+    this.state.patchSession = { path, chunks, cursor };
+    return { success: true, message: generateDiff(path, chunks[cursor].before, chunks[cursor].after) + '\nStage this hunk [y,n,q]?', newState: this.getState() };
+  }
 
+  private answerPatch(answer: string): CommandResult {
+    const session = this.state.patchSession!;
+    if (answer === 'q') { delete this.state.patchSession; return { success: true, message: '部分ステージングを終了しました。', newState: this.getState() }; }
+    session.chunks[session.cursor].selected = answer === 'y';
+    const content = session.chunks.map(chunk => chunk.selected ? chunk.after : chunk.before).join('');
+    this.state.index[session.path] = { path: session.path, status: content === headTree(this.state)[session.path] ? 'unmodified' : 'staged', content };
+    session.cursor = session.chunks.findIndex(chunk => chunk.changed && chunk.selected === undefined);
+    if (session.cursor < 0) { delete this.state.patchSession; return { success: true, message: '選択した変更だけをステージしました。', newState: this.getState() }; }
+    const chunk = session.chunks[session.cursor];
+    return { success: true, message: generateDiff(session.path, chunk.before, chunk.after) + '\nStage this hunk [y,n,q]?', newState: this.getState() };
+  }
 
-    return { success: true, message: output };
+  private blame(args: string[]): CommandResult {
+    const path = args.filter(arg => arg !== '--').at(-1);
+    if (!path || headTree(this.state)[path] === undefined) return { success: false, message: '追跡されているファイルを指定してください。' };
+    const history: Commit[] = [];
+    let id = this.resolveHeadCommitId();
+    while (id && this.state.commits[id]) { history.unshift(this.state.commits[id]); id = this.state.commits[id].parents[0]; }
+    const lines = (text: string) => text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+    let previous = '';
+    let origins: string[] = [];
+    for (const commit of history) {
+      const content = commit.tree[path] ?? '';
+      const next: string[] = [];
+      let cursor = 0;
+      for (const part of diffLines(previous, content)) {
+        const count = lines(part.value).length;
+        if (part.added) next.push(...Array<string>(count).fill(commit.id));
+        else if (part.removed) cursor += count;
+        else { next.push(...origins.slice(cursor, cursor + count)); cursor += count; }
+      }
+      previous = content;
+      origins = next;
+    }
+    return { success: true, message: lines(previous).map((line, i) => `${origins[i]} (${this.state.commits[origins[i]]?.author ?? 'User'} ${i + 1}) ${line.trimEnd()}`).join('\n') };
+  }
+
+  private restore(args: string[]): CommandResult {
+    const staged = args.includes('--staged') || args.includes('-S');
+    const worktree = !staged || args.includes('--worktree') || args.includes('-W');
+    const sourceAt = args.indexOf('-s');
+    const explicit = args.find(arg => arg.startsWith('--source='))?.slice('--source='.length) ?? (sourceAt >= 0 ? args[sourceAt + 1] : undefined);
+    const id = explicit ? resolveRevision(this.state, explicit) : undefined;
+    if (explicit && !id) return { success: false, message: 'Source revision not found.' };
+    const head = headTree(this.state);
+    const source = id ? this.state.commits[id].tree : staged ? head : indexTree(this.state);
+    let paths = args.filter((arg, index) => !arg.startsWith('-') && index !== sourceAt + 1);
+    if (sourceAt < 0) paths = args.filter(arg => !arg.startsWith('-'));
+    if (paths.includes('.')) paths = [...new Set([...Object.keys(source), ...Object.keys(head), ...Object.keys(this.state.index)])];
+    if (!paths.length || paths.some(path => source[path] === undefined && head[path] === undefined && !this.state.index[path])) return { success: false, message: 'restore: specify tracked files' };
+    for (const path of paths) {
+      if (staged) {
+        if (source[path] === head[path]) delete this.state.index[path];
+        else this.state.index[path] = source[path] === undefined ? { path, status: 'deleted' } : { path, status: 'staged', content: source[path] };
+      }
+      if (worktree) {
+        if (source[path] === undefined) delete this.state.workingDirectory[path];
+        else this.state.workingDirectory[path] = source[path];
+      }
+    }
+    return { success: true, message: '', newState: this.getState() };
+  }
+
+  private fileOperation(command: string, args: string[]): CommandResult {
+    const cached = command === 'rm' && args.includes('--cached');
+    const [path, destination] = args.filter(arg => arg !== '--cached');
+    const tracked = indexTree(this.state)[path];
+    if (tracked === undefined) return { success: false, message: 'Specify a tracked file.' };
+    if (!cached && this.state.workingDirectory[path] !== tracked) return { success: false, message: 'File has local changes; stage or restore them first.' };
+    if (command === 'mv' && (!destination || this.state.workingDirectory[destination] !== undefined)) return { success: false, message: 'Specify a new destination.' };
+    if (command === 'mv') {
+      this.state.workingDirectory[destination] = tracked;
+      this.state.index[destination] = { path: destination, status: 'staged', content: tracked };
+    }
+    if (!cached) delete this.state.workingDirectory[path];
+    this.state.index[path] = { path, status: 'deleted' };
+    return { success: true, message: '', newState: this.getState() };
   }
 
   /**
    * Implements `git rebase`.
    * Simplified version: Replays commits from current branch onto target branch.
    */
-  private rebase(args: string[]): CommandResult {
-    if (args.length === 0) {
-      return { success: false, message: 'fatal: No branch specified' };
-    }
+  private rebase(args: string[]): CommandResult { return this.replayOperation('rebase', args); }
+  private cherryPick(args: string[]): CommandResult { return this.replayOperation('cherry-pick', args); }
+  private revert(args: string[]): CommandResult { return this.replayOperation('revert', args); }
 
-    const targetBranchName = args[0];
-    const targetCommitId = this.state.branches[targetBranchName];
-
-    if (!targetCommitId) {
-      return { success: false, message: `fatal: '${targetBranchName}' does not point to a valid commit` };
+  private replayOperation(kind: 'rebase' | 'cherry-pick' | 'revert', args: string[]): CommandResult {
+    const pending = this.state.operation;
+    if (args[0] === '--abort') {
+      if (!pending || pending.kind !== kind) return { success: false, message: 'No matching operation in progress.' };
+      const commits = this.state.commits;
+      const reflog = this.state.reflog;
+      this.state = JSON.parse(JSON.stringify(pending.original));
+      this.state.commits = { ...commits, ...this.state.commits };
+      this.state.reflog = reflog;
+      return { success: true, message: `${kind} aborted.`, newState: this.getState() };
     }
-
-    const currentHeadId = this.resolveHeadCommitId();
-    if (!currentHeadId) {
-      return { success: false, message: 'fatal: You are not currently on a branch.' };
-    }
-    
-    if (this.state.HEAD.type !== 'branch') {
-       return { success: false, message: 'fatal: You must be on a branch to rebase.' };
-    }
-
-    if (currentHeadId === targetCommitId) {
-      return { success: true, message: 'Current branch is up to date.' };
-    }
-
-    // 1. Find merge base
-    const mergeBaseId = this.findMergeBase(currentHeadId, targetCommitId);
-    if (!mergeBaseId) {
-      return { success: false, message: 'fatal: refusing to rebase unrelated histories' };
-    }
-    
-    if (mergeBaseId === currentHeadId) {
-       // Current is ancestor of target -> Fast-forward (just update pointer)
-       this.state.branches[this.state.HEAD.value] = targetCommitId;
-       const newCommit = this.state.commits[targetCommitId];
-       this.state.workingDirectory = { ...newCommit.tree };
-       this.state.index = {};
-       for (const [path, content] of Object.entries(newCommit.tree)) {
-         this.state.index[path] = { path, status: 'unmodified', content };
-       }
-       return { success: true, message: `Fast-forwarded ${this.state.HEAD.value} to ${targetBranchName}`, newState: this.state };
-    }
-
-    if (mergeBaseId === targetCommitId) {
-      return { success: true, message: 'Current branch is already up to date with target.' };
-    }
-
-    // 2. Collect commits to rebase (from mergeBase (exclusive) to currentHead (inclusive))
-    const commitsToReplay: Commit[] = [];
-    let ptr: string | null = currentHeadId;
-    while (ptr && ptr !== mergeBaseId) {
-      const commit: Commit = this.state.commits[ptr];
-      commitsToReplay.unshift(commit); // Add to front to reverse order
-      ptr = commit.parents[0]; // Assuming linear history for simplicity
-    }
-
-    // 3. Reset HEAD to target
-    let newBaseId = targetCommitId;
-    
-    // 4. Replay commits
-    for (const commit of commitsToReplay) {
-      const originalParentId = commit.parents[0];
-      const originalParent = this.state.commits[originalParentId];
-      
-      // Perform 3-way merge logic for each commit
-      const mergeResult = this.performThreeWayMerge(originalParent, this.state.commits[newBaseId], commit);
-      
-      if (mergeResult.hasConflict) {
-        return { success: false, message: `Conflict detected while replaying commit ${commit.id.substring(0,7)}. Rebase aborted.` };
+    if (args[0] === '--continue' || args[0] === '--skip') {
+      if (!pending || pending.kind !== kind) return { success: false, message: 'No matching operation in progress.' };
+      if (pending.awaiting === 'todo') {
+        if (args[0] !== '--continue') return { success: false, message: 'Edit the todo and use --continue, or abort.' };
+        const rows = (pending.todo ?? '').split('\n').map(line => line.trim()).filter(line => line && !line.startsWith('#')).map(line => line.split(/\s+/));
+        const allowed = ['pick', 'reword', 'edit', 'squash', 'fixup', 'drop'];
+        const ids = rows.map(row => row[1]);
+        if (rows.some(row => !allowed.includes(row[0]) || !pending.remaining.includes(row[1])) || new Set(ids).size !== ids.length) return { success: false, message: 'Invalid todo: use each original commit at most once and a supported action.' };
+        const first = rows.find(row => row[0] !== 'drop');
+        if (first && ['squash', 'fixup'].includes(first[0])) return { success: false, message: 'The first kept commit cannot be squash or fixup.' };
+        pending.actions = Object.fromEntries(rows.map(([action, id]) => [id, action])) as NonNullable<typeof pending.actions>;
+        pending.remaining = ids;
+        delete pending.awaiting;
+        delete pending.todo;
+        return this.runReplay();
       }
-
-      // Create new commit
-      const newCommitId = Math.random().toString(36).substring(2, 9);
-      const newCommit: Commit = {
-        ...commit,
-        id: newCommitId,
-        parents: [newBaseId],
-        timestamp: Date.now(),
-        tree: mergeResult.tree
-      };
-      
-      this.state.commits[newCommitId] = newCommit;
-      newBaseId = newCommitId;
+      if (!pending.current) return { success: false, message: 'No paused commit.' };
+      if (pending.current.committed) {
+        if (!cleanTrackedFiles(this.state)) return { success: false, message: 'Commit your edits before continuing.' };
+        pending.remaining.shift();
+        delete pending.current;
+        delete pending.awaiting;
+        return this.runReplay();
+      }
+      if (args[0] === '--continue') {
+        const tree = indexTree(this.state);
+        if (Object.values(this.state.workingDirectory).some(content => content.includes('<<<<<<< HEAD')) ||
+          [...new Set([...Object.keys(tree), ...Object.keys(headTree(this.state))])].filter(path => inSparseScope(this.state, path)).some(path => tree[path] !== this.state.workingDirectory[path])) return { success: false, message: 'Resolve and stage all changes first.' };
+        const result = this.commit([...(pending.current.amend ? ['--amend'] : []), '-m', pending.current.message]);
+        if (!result.success) return result;
+      } else {
+        this.state.workingDirectory = { ...headTree(this.state), ...untrackedFiles(this.state) };
+        this.state.index = {};
+      }
+      pending.remaining.shift();
+      delete pending.current;
+      return this.runReplay();
     }
-
-    // 5. Update branch pointer
-    this.state.branches[this.state.HEAD.value] = newBaseId;
-    
-    // Update WD/Index
-    const finalCommit = this.state.commits[newBaseId];
-    this.state.workingDirectory = { ...finalCommit.tree };
-    this.state.index = {};
-    for (const [path, content] of Object.entries(finalCommit.tree)) {
-      this.state.index[path] = { path, status: 'unmodified', content };
-    }
-
-    return { success: true, message: `Successfully rebased and updated ${this.state.HEAD.value}.`, newState: this.state };
-  }
-
-  /**
-   * Implements `git cherry-pick`.
-   * Applies changes from a specific commit onto the current HEAD.
-   */
-  private cherryPick(args: string[]): CommandResult {
-    if (args.length === 0) {
-      return { success: false, message: 'fatal: No commit specified' };
-    }
-
-    const commitId = args[0];
-    const commit = this.state.commits[commitId];
-
-    if (!commit) {
-      return { success: false, message: `fatal: '${commitId}' is not a valid commit` };
-    }
-
-    const currentHeadId = this.resolveHeadCommitId();
-    if (!currentHeadId) {
-      return { success: false, message: 'fatal: You are not currently on a branch.' };
-    }
-
-    // Get parent of the commit we're cherry-picking
-    if (commit.parents.length === 0) {
-      return { success: false, message: 'fatal: Cannot cherry-pick a root commit' };
-    }
-
-    const parentCommitId = commit.parents[0];
-    const parentCommit = this.state.commits[parentCommitId];
-    const currentCommit = this.state.commits[currentHeadId];
-
-    // 3-way merge: parent (base), current HEAD (ours), commit (theirs)
-    const mergeResult = this.performThreeWayMerge(parentCommit, currentCommit, commit);
-
-    if (mergeResult.hasConflict) {
-      // Apply conflict to working directory
-      this.state.workingDirectory = mergeResult.tree;
-      return { success: false, message: `Conflict detected while cherry-picking ${commitId.substring(0,7)}. Fix conflicts and commit.`, newState: this.state };
-    }
-
-    // Create new commit
-    const newCommitId = Math.random().toString(36).substring(2, 9);
-    const newCommit: Commit = {
-      id: newCommitId,
-      message: commit.message,
-      parents: [currentHeadId],
-      timestamp: Date.now(),
-      author: commit.author,
-      changes: Object.entries(mergeResult.tree).map(([path, content]) => ({
-        path,
-        status: 'staged' as const,
-        content
-      })),
-      tree: mergeResult.tree
-    };
-
-    this.state.commits[newCommitId] = newCommit;
-
-    // Update branch pointer
-    if (this.state.HEAD.type === 'branch') {
-      this.state.branches[this.state.HEAD.value] = newCommitId;
+    if (pending || this.state.pendingMerge) return { success: false, message: 'Complete or abort the current operation first.' };
+    if (!cleanTrackedFiles(this.state)) return { success: false, message: 'Commit or stash local changes first.' };
+    const interactive = kind === 'rebase' && (args.includes('-i') || args.includes('--interactive'));
+    const targets = args.filter(arg => !['-i', '--interactive'].includes(arg));
+    if (!targets.length || targets.some(arg => arg.startsWith('-'))) return { success: false, message: `${kind}: specify a commit or branch; supported controls: --continue/--abort/--skip` };
+    const original = this.getState();
+    const currentId = this.resolveHeadCommitId();
+    if (!currentId) return { success: false, message: 'No current commit.' };
+    let remaining: string[];
+    if (kind === 'rebase') {
+      if (this.state.HEAD.type !== 'branch') return { success: false, message: 'Switch to a branch before rebasing.' };
+      const target = resolveRevision(this.state, targets[0]);
+      if (!target) return { success: false, message: 'Target not found.' };
+      const common = this.findMergeBase(currentId, target);
+      if (!common) return { success: false, message: 'Unrelated histories.' };
+      if (common === target && !interactive) return { success: true, message: 'Already up to date.' };
+      remaining = [];
+      let cursor: string | undefined = currentId;
+      while (cursor && cursor !== common) {
+        remaining.unshift(cursor);
+        cursor = this.state.commits[cursor]?.parents[0];
+      }
+      const untracked = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => indexTree(this.state)[path] === undefined));
+      if (Object.keys(untracked).some(path => this.state.commits[target].tree[path] !== undefined)) return { success: false, message: 'Untracked files would be overwritten.' };
+      this.state.branches[this.state.HEAD.value] = target;
+      this.state.workingDirectory = { ...this.state.commits[target].tree, ...untracked };
+      this.state.index = {};
+      if (remaining.length === 0 && !interactive) return { success: true, message: 'Fast-forward.', newState: this.getState() };
     } else {
-      this.state.HEAD.value = newCommitId;
+      const resolved = targets.map(arg => resolveRevision(this.state, arg));
+      if (resolved.some(id => !id)) return { success: false, message: 'Commit not found.' };
+      remaining = resolved as string[];
+      if (remaining.some(id => this.state.commits[id].parents.length > 1)) return { success: false, message: 'Merge commits require a mainline choice; select a single-parent commit in this simulator.' };
     }
-
-    // Update WD/Index
-    this.state.workingDirectory = { ...mergeResult.tree };
-    this.state.index = {};
-    for (const [path, content] of Object.entries(mergeResult.tree)) {
-      this.state.index[path] = { path, status: 'unmodified', content };
+    this.state.operation = { kind, original, remaining };
+    if (interactive) {
+      this.state.operation.awaiting = 'todo';
+      this.state.operation.todo = remaining.map(id => `pick ${id} ${this.state.commits[id].message}`).join('\n');
+      return { success: true, message: 'todoを編集して git rebase --continue を実行してください。reword/editは適用後に一時停止し、commit --amendなどで編集できます。', newState: this.getState() };
     }
-
-    return { success: true, message: `[${this.state.HEAD.type === 'branch' ? this.state.HEAD.value : 'detached'}] ${commit.message}`, newState: this.state };
+    return this.runReplay();
   }
 
-  /**
-   * Implements `git revert`.
-   * Creates a new commit that undoes changes from a specific commit.
-   */
-  private revert(args: string[]): CommandResult {
-    if (args.length === 0) {
-      return { success: false, message: 'fatal: No commit specified' };
+  private runReplay(): CommandResult {
+    const operation = this.state.operation!;
+    while (operation.remaining.length) {
+      const source = this.state.commits[operation.remaining[0]];
+      const action = operation.actions?.[source.id] ?? 'pick';
+      if (action === 'drop') { operation.remaining.shift(); continue; }
+      const parent = this.state.commits[source.parents[0]] ?? { ...source, tree: {} };
+      const ours = this.state.commits[this.resolveHeadCommitId()!];
+      const untracked = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => indexTree(this.state)[path] === undefined));
+      const result = operation.kind === 'revert' ? this.performThreeWayMerge(source, ours, parent) : this.performThreeWayMerge(parent, ours, source);
+      if (Object.keys(untracked).some(path => result.tree[path] !== undefined)) return { success: false, message: 'Untracked files would be overwritten.' };
+      const amend = action === 'squash' || action === 'fixup';
+      const message = operation.kind === 'revert' ? `Revert "${source.message}"` : action === 'fixup' ? ours.message : action === 'squash' ? `${ours.message}\n\n${source.message}` : source.message;
+      this.state.workingDirectory = { ...result.tree, ...untracked };
+      this.state.index = {};
+      for (const path of new Set([...Object.keys(ours.tree), ...Object.keys(result.tree)])) {
+        const content = result.tree[path];
+        if (content?.includes('<<<<<<< HEAD')) continue;
+        this.state.index[path] = content === undefined ? { path, status: 'deleted' } : { path, status: 'staged', content };
+      }
+      if (result.hasConflict) {
+        operation.current = { id: source.id, message, amend };
+        return { success: false, message: `Conflict detected during ${operation.kind}. Resolve files, git add, then git ${operation.kind} --continue; or use --abort.`, newState: this.getState() };
+      }
+      if (!sameTree(ours.tree, result.tree)) {
+        const committed = this.commit([...(amend ? ['--amend'] : []), '-m', message]);
+        if (!committed.success) return committed;
+      }
+      if (action === 'edit' || action === 'reword') {
+        operation.current = { id: source.id, message, committed: true };
+        operation.awaiting = action;
+        return { success: true, message: '一時停止しました。commit --amendでメッセージを変更するか、変更をコミットしてからgit rebase --continueを実行してください。', newState: this.getState() };
+      }
+      operation.remaining.shift();
     }
-
-    const commitId = args[0];
-    const commit = this.state.commits[commitId];
-
-    if (!commit) {
-      return { success: false, message: `fatal: '${commitId}' is not a valid commit` };
-    }
-
-    const currentHeadId = this.resolveHeadCommitId();
-    if (!currentHeadId) {
-      return { success: false, message: 'fatal: You are not currently on a branch.' };
-    }
-
-    // Get parent of the commit we're reverting
-    if (commit.parents.length === 0) {
-      return { success: false, message: 'fatal: Cannot revert a root commit' };
-    }
-
-    const parentCommitId = commit.parents[0];
-    const parentCommit = this.state.commits[parentCommitId];
-    const currentCommit = this.state.commits[currentHeadId];
-
-    // 3-way merge to apply reverse: commit (base), current HEAD (ours), parent (theirs)
-    // This effectively undoes the changes from commit
-    const mergeResult = this.performThreeWayMerge(commit, currentCommit, parentCommit);
-
-    if (mergeResult.hasConflict) {
-      // Apply conflict to working directory
-      this.state.workingDirectory = mergeResult.tree;
-      return { success: false, message: `Conflict detected while reverting ${commitId.substring(0,7)}. Fix conflicts and commit.`, newState: this.state };
-    }
-
-    // Create new commit with revert message
-    const newCommitId = Math.random().toString(36).substring(2, 9);
-    const revertMessage = `Revert "${commit.message}"`;
-    const newCommit: Commit = {
-      id: newCommitId,
-      message: revertMessage,
-      parents: [currentHeadId],
-      timestamp: Date.now(),
-      author: 'User',
-      changes: Object.entries(mergeResult.tree).map(([path, content]) => ({
-        path,
-        status: 'staged' as const,
-        content
-      })),
-      tree: mergeResult.tree
-    };
-
-    this.state.commits[newCommitId] = newCommit;
-
-    // Update branch pointer
-    if (this.state.HEAD.type === 'branch') {
-      this.state.branches[this.state.HEAD.value] = newCommitId;
-    } else {
-      this.state.HEAD.value = newCommitId;
-    }
-
-    // Update WD/Index
-    this.state.workingDirectory = { ...mergeResult.tree };
+    const kind = operation.kind;
+    delete this.state.operation;
     this.state.index = {};
-    for (const [path, content] of Object.entries(mergeResult.tree)) {
-      this.state.index[path] = { path, status: 'unmodified', content };
-    }
-
-    return { success: true, message: `[${this.state.HEAD.type === 'branch' ? this.state.HEAD.value : 'detached'}] ${revertMessage}`, newState: this.state };
+    return { success: true, message: kind === 'rebase' ? 'Successfully rebased.' : `Completed ${kind}: ${this.state.commits[this.resolveHeadCommitId()!]?.message}`, newState: this.getState() };
   }
 
-  /**
-   * Helper for 3-way merge logic.
-   * Returns the new tree and conflict status.
-   */
   private performThreeWayMerge(base: Commit, ours: Commit, theirs: Commit): { tree: Record<string, string>, hasConflict: boolean } {
     const allFiles = new Set([
       ...Object.keys(base.tree),
