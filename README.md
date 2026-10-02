@@ -102,6 +102,7 @@ npm run test:watch
 詳細な設計や実装内容については、`docs/` ディレクトリ内のドキュメントを参照してください。
 
 -   [実務向けGit学習カリキュラム](docs/practical_git_curriculum.md): 12章の学習順序、139演習の対応状況、7つの総合演習、再現範囲
+-   [レビューと検証の記録](docs/review_verification.md): 修正した不具合、回帰テスト、ブラウザ確認、クラウドでの確認範囲
 -   [01_project_setup.md](docs/01_project_setup.md): プロジェクトセットアップ
 -   [02_core_features.md](docs/02_core_features.md): コア機能の実装
 -   [03_feature_expansion.md](docs/03_feature_expansion.md): 機能拡張

@@ -434,7 +434,10 @@ export class GitEngine {
     if (args[0] === '--abort') {
       const pending = this.state.pendingMerge;
       if (!pending) return { success: false, message: 'No merge in progress.' };
-      this.state.workingDirectory = pending.workingDirectory;
+      const ours = headTree(this.state);
+      const theirs = this.state.commits[pending.targetId].tree;
+      const untracked = Object.fromEntries(Object.entries(untrackedFiles(this.state)).filter(([path]) => ours[path] === theirs[path]));
+      this.state.workingDirectory = { ...pending.workingDirectory, ...untracked };
       this.state.index = pending.index;
       delete this.state.pendingMerge;
       return { success: true, message: 'Merge aborted.', newState: this.getState() };
@@ -1033,13 +1036,29 @@ export class GitEngine {
   private cherryPick(args: string[]): CommandResult { return this.replayOperation('cherry-pick', args); }
   private revert(args: string[]): CommandResult { return this.replayOperation('revert', args); }
 
+  // Conflict files created by the operation are not unrelated untracked work.
+  private replayUntrackedFiles(): Record<string, string> {
+    const affected = new Set<string>();
+    const current = this.state.operation?.current;
+    for (const id of current ? [current.id] : []) {
+      const commit = this.state.commits[id];
+      const parent = this.state.commits[commit.parents[0]]?.tree ?? {};
+      for (const path of new Set([...Object.keys(commit.tree), ...Object.keys(parent)])) {
+        if (commit.tree[path] !== parent[path]) affected.add(path);
+      }
+    }
+    return Object.fromEntries(Object.entries(untrackedFiles(this.state)).filter(([path]) => !affected.has(path)));
+  }
+
   private replayOperation(kind: 'rebase' | 'cherry-pick' | 'revert', args: string[]): CommandResult {
     const pending = this.state.operation;
     if (args[0] === '--abort') {
       if (!pending || pending.kind !== kind) return { success: false, message: 'No matching operation in progress.' };
+      const untracked = Object.fromEntries(Object.entries(this.replayUntrackedFiles()).filter(([path]) => headTree(pending.original)[path] === undefined));
       const commits = this.state.commits;
       const reflog = this.state.reflog;
       this.state = JSON.parse(JSON.stringify(pending.original));
+      this.state.workingDirectory = { ...this.state.workingDirectory, ...untracked };
       this.state.commits = { ...commits, ...this.state.commits };
       this.state.reflog = reflog;
       return { success: true, message: `${kind} aborted.`, newState: this.getState() };
@@ -1075,7 +1094,7 @@ export class GitEngine {
         const result = this.commit([...(pending.current.amend ? ['--amend'] : []), '-m', pending.current.message]);
         if (!result.success) return result;
       } else {
-        this.state.workingDirectory = { ...headTree(this.state), ...untrackedFiles(this.state) };
+        this.state.workingDirectory = { ...headTree(this.state), ...this.replayUntrackedFiles() };
         this.state.index = {};
       }
       pending.remaining.shift();
