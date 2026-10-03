@@ -1,5 +1,8 @@
 # Git Learning App - Walkthrough
 
+> 初期実装時の計画・履歴です。現在の仕様・検証は [README](../README.md) と [学習体験改善の記録](learning_experience.md) を参照してください。
+
+
 ## 概要
 Gitの基本操作から応用までを学べるWebアプリケーションを作成しました。
 Next.js + React + Tailwind CSS + Framer Motion で構築されており、実際のGitコマンドをシミュレートしながら、視覚的に理解を深めることができます。

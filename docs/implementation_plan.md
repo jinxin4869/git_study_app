@@ -1,5 +1,8 @@
 # Git学習アプリ - 実装計画書
 
+> 初期実装時の計画・履歴です。現在の仕様・検証は [README](../README.md) と [学習体験改善の記録](learning_experience.md) を参照してください。
+
+
 ## 目標
 Gitの基本操作から、実務で遭遇する複雑なシナリオ（ブランチ戦略、複雑なマージなど）までを学べるインタラクティブなアプリケーションを作成します。
 
@@ -45,7 +48,7 @@ Gitの基本操作から、実務で遭遇する複雑なシナリオ（ブラ�
 
 ## 変更内容
 ### [プロジェクトセットアップ]
-#### [NEW] [package.json](file:///Users/jinxin/Project/AIエディタ/package.json)
+#### [NEW] [package.json](../package.json)
 - 以下のコマンドでNext.jsプロジェクトを初期化しました。
   ```bash
   npx -y create-next-app@latest git-learning-app --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm
@@ -53,7 +56,7 @@ Gitの基本操作から、実務で遭遇する複雑なシナリオ（ブラ�
 - その後、ルートディレクトリにファイルを移動し、必要なUIライブラリ（`lucide-react`, `framer-motion`, `clsx`, `tailwind-merge`）を追加インストールしました。
 
 ### [コアエンジン]
-#### [NEW] [src/engine/git-simulator.ts](file:///Users/jinxin/Project/AIエディタ/src/engine/git-simulator.ts)
+#### [NEW] [src/engine/git-simulator.ts](../src/engine/git-simulator.ts)
 - 実際のGitを使わずにGitの状態変化をシミュレートするロジック。
 
 ## 検証計画

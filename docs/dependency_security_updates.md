@@ -73,3 +73,12 @@ CI=1 npm run test:e2e -- --workers=2 --retries=0
 - Chromiumのdesktop・mobile・narrow・tabletのE2E 76件が成功。更新した本番ビルドから新しくサーバーを起動し、再試行なしで確認した。
 
 本番への公開、Firefox・WebKit、実機IMEの確認は今回の範囲に含まれない。
+
+
+## 学習体験改善時の再監査（2026-10-03 JST）
+
+最新origin/main `ea90e1d` を基点に、ユーザーの依存メタデータ送信許可を得てnpmレジストリへ再監査した。本番は0件（終了コード0）、全依存はHigh 5件（終了コード1）で上記と同じ。`braces`の[告知](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)も再確認し、修正版はNoneだった。深くネストした攻撃者のglobパターンがbracesの再帰解析へ渡るとNodeプロセスのスタックを枯渇させる。ブラウザの演習入力がESLintのglob解析へ渡る経路はなく、この依存経路は開発lintに限られる。開発依存の警告は未解決として残す。
+
+監査のfixAvailableは`eslint-config-next@14.2.35`へのメジャー変更を示すが、検査互換性を崩して件数だけ減らす更新は採用しなかった。lint/型/テスト/buildの無効化は行っていない。bracesまたは親依存の修正と、ESLint 10対応pluginの移行はO04の後回し課題。今回lockfileの依存バージョン変更なし。
+
+今回もユニット494件、lint・型・本番ビルド、Chromium4サイズ/Firefox/WebKitのE2E計186件が成功した。アプリ検証は[学習体験改善の記録](learning_experience.md)を参照する。
