@@ -29,3 +29,11 @@ PR #8/#11のマージ後のmain `f923cd2` を取り込み、package.jsonとpacka
 最新mainのlockfileを基点にnpm 11.21.0で通常のpeer解決により再生成した。npm ci、lint、型チェック、unit621件（25ファイル）、npm ls --allが成功。競合マーカーや未解消ファイルを残さず、peer無視・履歴書換え・検査無効化は行わない。
 
 この再同期の最終コミットに対するbuild/E2E/Previewと対象SHAは [PR checks](https://github.com/jinxin4869/git_study_app/pull/10/checks) とPR本文を参照する。初回CI成功記録とは区別する。mainへのマージと本番公開は行っていない。
+
+## TypeScript PRマージ後の最終同期（2026-10-04）
+
+PR #9取込後のmain `2b3e814` をmergeした。package.jsonではVitest 5.0.2指定とTypeScript native aliasの追加が競合したため、Vitest 5を保持しながらmainのTypeScript 7 CLI/TypeScript 6 API併用を取り込んだ。CSS型宣言、Vite 8.3.1/Oxc設定、Lucide 1.49.0、Node 22型定義/enginesも維持する。
+
+package-lock.jsonはGitの自動merge結果がmanifestと一致し、必要な依存版とmainの本番依存バージョン/integrityを保持することを確認した。今回は追加の依存更新やlockfile再生成を行っていない。クリーンなnpm ci、lint、TypeScript 7の型チェック、Vitest 5のunit621件（25ファイル）、npm ls --allが成功。既存の実Git比較/状態保持/特殊名テストを維持する。
+
+この最終同期のSHAとbuild/E2E/Previewの結果はPR本文と [PR checks](https://github.com/jinxin4869/git_study_app/pull/10/checks) を参照する。前回のCI結果とは分けて記録する。force push、検査の無効化、mainへの直接push、PRマージ、手動deployは行っていない。
