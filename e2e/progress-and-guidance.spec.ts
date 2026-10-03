@@ -203,3 +203,19 @@ test('keyboard search, selection, hint and missing-file focus fallback', async (
   await page.getByRole('button', { name: 'Close preview' }).focus(); await page.keyboard.press('Escape');
   await expect(page.getByRole('textbox', { name: '演習コマンド' })).toBeFocused();
 });
+
+test('resetting free practice clears Git, draft input and history without erasing learning records', async ({ page }) => {
+  await page.goto('/game'); await choose(page, 'Level 1-3'); await run(page, 'git status');
+  await page.evaluate(key => localStorage.removeItem(key + 'selection'), prefix);
+  await page.reload();
+  await run(page, 'touch scratch.txt');
+  const input = page.getByRole('textbox', { name: '演習コマンド' });
+  await input.fill('git status');
+  await page.getByRole('button', { name: '現在の演習を最初からやり直す' }).click();
+  await expect(input).toHaveValue('');
+  await expect(input).toBeFocused();
+  await input.press('ArrowUp');
+  await expect(input).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'scratch.txtを開く' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Level 1-3/ })).toContainText('完了済み');
+});

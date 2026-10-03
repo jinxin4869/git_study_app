@@ -81,4 +81,4 @@ CI=1 npm run test:e2e -- --workers=2 --retries=0
 
 監査のfixAvailableは`eslint-config-next@14.2.35`へのメジャー変更を示すが、検査互換性を崩して件数だけ減らす更新は採用しなかった。lint/型/テスト/buildの無効化は行っていない。bracesまたは親依存の修正と、ESLint 10対応pluginの移行はO04の後回し課題。今回lockfileの依存バージョン変更なし。
 
-今回もユニット494件、lint・型・本番ビルド、Chromium4サイズ/Firefox/WebKitのE2E計186件が成功した。アプリ検証は[学習体験改善の記録](learning_experience.md)を参照する。
+今回もユニット494件、lint・型・本番ビルド、Chromium4サイズ/Firefox/WebKitのE2E計192件が成功した。アプリ検証は[学習体験改善の記録](learning_experience.md)を参照する。

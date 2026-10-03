@@ -33,7 +33,7 @@
 | `git-learning:v1:complete:<id>` | `version`, `id`, `completedAt` | 既知ID一致、非負の安全な整数日時（ms） |
 | `git-learning:v1:hint:<id>` | `version`, `id`, `level` | 既知ID一致、整数1〜4。再挑戦では既存の利用段階を最大値として保持 |
 
-各JSONは10,000文字以下のオブジェクトであることを確認する。パス・GitStateを保存データから構築しない。無効IDは未選択にし、不正レコードは無視して警告する。未対応のversionは画面で警告し、更新操作で勝手に上書きしない。未知IDの演習別記録は採用せず、全削除時はアプリのprefix内の未知キーも削除する。他アプリのキーは削除しない。
+各JSONは10,000文字以下のオブジェクトであることを確認する。パス・GitStateを保存データから構築しない。無効IDは未選択にし、破損JSONや不正な完了/ヒントレコードは無視して警告する。未知コースはallへ、不正な検索値は空文字へ戻す。未対応のversionは画面で警告し、更新操作で勝手に上書きしない。未知IDの演習別記録は採用せず、全削除時はアプリのprefix内の未知キーも削除する。他アプリのキーは削除しない。
 
 破損JSONは本人の保存再試行/その演習の再達成で対象レコードを修復できる。未対応versionや修復しきれない破損は、画面の「保存と再開」で対象記録の範囲を確認して削除する。将来の課題変更/新形式に対するmigrationは、形式を導入する作業で仕様・テストを追加する。
 
@@ -86,9 +86,9 @@
 | `npm run typecheck` | 成功 | ソースとE2Eの型検査 |
 | `npm test` | 494件 / 22ファイル成功 | 既存325件を維持。保存形式・破損/容量/削除/タブ、139件の中間状態/失敗/説明、操作案内を追加 |
 | `npm run build` | 成功 | Next.js 15.5.27の最適化された本番ビルド、型/lintあり |
-| Chromium desktop/mobile/narrow/tablet + Firefox desktop | 155件成功 | 31フロー×5構成、元の19フローもすべて維持 |
-| WebKit mobile | 31件成功 | 同じ31フロー。実Safariの代わりとはしない |
-| E2E合計 | 186件成功 | 再試行0、ブラウザJS例外なし |
+| Chromium desktop/mobile/narrow/tablet + Firefox desktop | 160件成功 | 32フロー×5構成、元の19フローもすべて維持 |
+| WebKit mobile | 32件成功 | 同じ32フロー。実Safariの代わりとはしない |
+| E2E合計 | 192件成功 | 再試行0、ブラウザJS例外なし |
 | 基点版の採点と新assessmentの比較 | 一致 | 全139演習の初期状態と全解答途中（実行成否を除いた状態述語）。一時比較コードは削除 |
 | PC・モバイルの表示/寸法 | 確認 | 1440×1000/390×844、ヒント全展開と保存/削除確認。横はみ出しなし、新ボタン44px以上 |
 | Impeccable検出 | 指摘0 | 変更UIを1回検出。視覚/操作確認を別に実施 |
@@ -103,19 +103,21 @@ npm run build
 CI=1 npm run test:e2e -- --workers=2 --retries=0
 ```
 
-通常は`npx playwright install --with-deps chromium firefox webkit`でOS依存を用意する。CIの同ステップへ3ブラウザを追加済み。今回のローカル実行はChromium/Firefoxの5構成を標準設定で実行し、WebKitは後述のローカルruntimeで同じテストを実行した。
+通常は`npx playwright install --with-deps chromium firefox webkit`でOS依存を用意する。CIの同ステップへ3ブラウザを追加済み。今回の最終ローカル実行はChromium/Firefoxの5構成は標準browser設定、WebKitのみ後述のローカルruntimeを使い、6構成192件を一度のE2E実行で検証した。
 
 WebKitのOS依存導入はsudoパスワードを要求したため行えなかった。Playwrightのdry-runが示す公式Ubuntuパッケージ182個（108MB）を`/tmp/git-study-webkit-deps`へダウンロードし、dpkg-debで展開した。元のMiniBrowserラッパーはLD_LIBRARY_PATHを上書きするため、公式の同じWebKit 2359 WPEバイナリを、元のWEBKIT_*環境とbundled lib + 展開libの検索パスを設定した一時ランチャーで起動した。Playwrightの標準host検出が見るldconfigのOSキャッシュには一時libは登録されないため、ローカル検証ではそのランチャーをexecutablePathで指定した。実バイナリ・実ライブラリで全アプリテストを実行しており、テストのskipや依存監査/lintの無効化はしていない。OSやブラウザ配布物は変更していない。
 
 一時ランチャーとローカル設定は本体/CIへ導入しない。検証用設定`playwright.webkit-local.config.ts`は削除済みで、コミットされる設定は標準のbrowserName指定のみ。WebKit実行結果はPlaywright WebKitの検証であり、実Safari/実機キーボードの検証ではない。
 
-一時証跡は`/tmp/git-study-e2e-final.log`（155件）、`/tmp/git-study-e2e-webkit.log`（31件）、`/tmp/git-study-audit-current.json`、`/tmp/git-study-audit-production.json`、`/tmp/git-study-ui-detector.json`、`/tmp/git-study-{desktop,mobile}-{hints,delete}.png`。CIは3ブラウザのE2Eレポートを既存どおり保存する。
+一時証跡は`/tmp/git-study-e2e-all-final.log`（192件）、`/tmp/git-study-audit-current.json`、`/tmp/git-study-audit-production.json`、`/tmp/git-study-ui-detector.json`、`/tmp/git-study-{desktop,mobile}-{hints,delete}.png`。CIは3ブラウザのE2Eレポートを既存どおり保存する。
 
 ## 発見した問題・修正と未検証範囲
 
+- 自由練習でコマンドを実行し、未送信の入力を入れてリセットすると、今回変更したGit状態のみのリセット処理では入力と上下キー履歴が残る構造だった。入力・履歴・履歴位置をクリアして入力へフォーカスするよう修正し、保存した達成記録は保持する回帰E2Eを6構成に追加した。
+
 - 新テストで`getByRole('alert')`を指定すると、Next.jsの`__next-route-announcer__`も拾いstrict mode violationとなった。保存を壊す初期データ/容量エラーで再現した。アプリ本体のmainへ対象を限定して修正し、全5構成の追加50件が成功した。
 - フォルダ内ファイルのプレビューを閉じると、従来はFileTree再mountでフォルダが閉じ、フォーカス先を失う構造だった。FileTreeの展開を維持し、キーボードのEnter/Escで復帰するテストを追加した。
-- OSへのPlaywright依存インストールはsudoパスワードが必要で実行できなかった。標準host検出では一時ライブラリがOSキャッシュに出ないため、上記の一時runtimeから実WebKitを起動し31件を検証した。通常のCI環境は標準install-depsを使う。
+- OSへのPlaywright依存インストールはsudoパスワードが必要で実行できなかった。標準host検出では一時ライブラリがOSキャッシュに出ないため、上記の一時runtimeから実WebKitを起動し32件を検証した。通常のCI環境は標準install-depsを使う。
 - 実機IME・ソフトキーボード、実スクリーンリーダー、実Safari、200%ズーム/高コントラストは未検証。合成イベントやPlaywrightだけで適合完了とはしない。
 - mainへのマージ/本番デプロイ後の確認は未実施。今回のPRはmainへ向けた実装レビュー用で、公開工程はT10/O07に残す。
 - 開発用braces警告5件は未修正版のため未解決。本番監査0件。条件と再検討先は[依存監査記録](dependency_security_updates.md)を参照する。

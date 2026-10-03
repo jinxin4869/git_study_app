@@ -421,7 +421,7 @@ function LearningSession() {
             <h1 className="font-bold text-lg">Terminal</h1>
           </div>
           <button 
-            onClick={() => { if (currentScenario) { loadScenario(currentScenario); notify("演習を初期状態にリセットしました。保存記録は保持しています。"); commandRef.current?.focus(); } else { engine.loadState(new GitEngine().getState()); setState(engine.getState()); setSelectedFile(null); setResolvingFile(null); setLastAttempt(null); setOutput([]); notify("自由練習をリセットしました。"); } }}
+            onClick={() => { if (currentScenario) { loadScenario(currentScenario); notify("演習を初期状態にリセットしました。保存記録は保持しています。"); commandRef.current?.focus(); } else { engine.loadState(new GitEngine().getState()); setState(engine.getState()); setSelectedFile(null); setResolvingFile(null); setLastAttempt(null); setOutput([]); setInput(''); setHistory([]); setHistoryIndex(-1); notify("自由練習をリセットしました。"); commandRef.current?.focus(); } }}
             aria-label="現在の演習を最初からやり直す"
             className="min-w-11 min-h-11 flex items-center justify-center p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors"
             title="演習をやり直す"
