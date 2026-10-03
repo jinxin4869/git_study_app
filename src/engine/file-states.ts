@@ -1,6 +1,7 @@
 import { GitState } from '@/types/git';
 import { dictionary, headTree, indexTree, inSparseScope } from './git-state';
 import { isIgnored } from './gitignore';
+import { isUnmerged } from './conflicts';
 
 export type ChangeKind = 'added' | 'modified' | 'deleted' | null;
 export interface FileState {
@@ -20,7 +21,7 @@ export function fileStates(state: GitState): FileState[] {
   const head = headTree(state);
   const index = indexTree(state);
   const working = dictionary(state.workingDirectory);
-  const paths = new Set([...Object.keys(head), ...Object.keys(index), ...Object.keys(working)]);
+  const paths = new Set([...Object.keys(head), ...Object.keys(index), ...Object.keys(working), ...state.unmergedPaths ?? []]);
   return [...paths].filter(path => inSparseScope(state, path)).map(path => {
     const content = working[path];
     const untracked = index[path] === undefined && content !== undefined;
@@ -30,7 +31,7 @@ export function fileStates(state: GitState): FileState[] {
       staged: change(head[path], index[path]),
       unstaged: index[path] === undefined ? null : change(index[path], content),
       untracked: untracked && !ignored, ignored,
-      conflict: content?.includes('<<<<<<<') ?? false,
+      conflict: isUnmerged(state, path),
     };
   });
 }

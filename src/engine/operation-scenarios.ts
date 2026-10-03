@@ -37,6 +37,6 @@ export const operationScenarios: Scenario[] = [
     { stashCount: 2, working: { 'app.ts': 'draft' } }, ['git stash apply stash@{1}'], [], '作業の退避'),
   lesson('stash-drop', '不要な保存を削除', '最新のstashだけを削除してください。作業ファイルには適用しません。', { branches: { main: 'c1' }, workingDirectory: c1.tree, stash: [saved] },
     { stashCount: 0, working: c1.tree }, ['git stash drop stash@{0}'], [], '作業の退避'),
-  lesson('stash-conflict', 'stash復元時の競合', 'mainが変更されてからstashを復元すると競合します。保存を残し、app.tsをCombinedに解消してください。', { stash: [saved] },
-    { stashCount: 1, working: { 'app.ts': 'Combined' }, head: 'c2' }, ['git stash pop', 'echo "Combined" > app.ts'], ['git stash pop'], '作業の退避')
+  lesson('stash-conflict', 'stash復元時の競合', 'mainが変更されてからstashを復元すると競合します。保存を残し、app.tsをCombinedに解消してstageしてください。', { stash: [saved] },
+    { stashCount: 1, working: { 'app.ts': 'Combined' }, head: 'c2', unmergedPaths: [] }, ['git stash pop', 'echo "Combined" > app.ts', 'git add app.ts'], ['git stash pop'], '作業の退避')
 ];

@@ -1,5 +1,6 @@
 import { CommandResult, GitState, Scenario } from '@/types/git';
 import { headTree, indexTree, cleanTrackedFiles, normalizeCommand } from './git-state';
+import { hasUnmergedPaths } from './conflicts';
 
 /**
  * Checks if the current state meets the scenario goal.
@@ -29,6 +30,7 @@ const matchesGoal = (currentState: GitState, scenario: Scenario, lastCommand?: s
     const expected = goal.params ?? {};
     if (expected.command && (!lastCommand || normalizeCommand(lastCommand) !== normalizeCommand(expected.command as string))) return false;
     if (expected.operation === null && currentState.operation) return false;
+    if (expected.unmergedPaths !== undefined && JSON.stringify(currentState.unmergedPaths ?? []) !== JSON.stringify(expected.unmergedPaths)) return false;
     if (typeof expected.operation === 'string' && currentState.operation?.kind !== expected.operation) return false;
     if (expected.bisectActive !== undefined && !!currentState.bisect !== expected.bisectActive) return false;
     if (expected.bisectFound && (currentState.bisect?.found ?? currentState.lastBisectFound) !== expected.bisectFound) return false;
@@ -122,7 +124,7 @@ const matchesGoal = (currentState: GitState, scenario: Scenario, lastCommand?: s
     }
     return true;
   }
-  if (goal.type === 'conflict_present') return Object.values(currentState.workingDirectory).some(content => content.includes('<<<<<<< HEAD'));
+  if (goal.type === 'conflict_present') return hasUnmergedPaths(currentState);
   if (goal.type === 'conflict_resolved') {
     const content = currentState.workingDirectory[goal.params?.name as string];
     const accepted = goal.params?.acceptedContents;
@@ -218,6 +220,7 @@ export interface GoalCondition { id: string; label: string; met: boolean }
 export interface GoalAssessment { met: boolean; conditions: GoalCondition[] }
 const describeValue = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value);
 const fieldLabels: Record<string, string> = {
+  unmergedPaths: '未解消の競合パス（空配列は解消してstage済み）',
   command: '指定した操作を成功させる', operation: '進行中の履歴操作', bisectActive: 'bisectの実行状態', bisectFound: '原因コミット',
   sparseCheckout: 'sparse-checkoutの対象', lfsInstalled: 'LFSの初期化', lfsPatterns: 'LFSの対象パターン',
   worktrees: 'worktreeのブランチ（nullは削除）', worktreeWorking: 'worktreeの作業ファイル', submodules: 'submoduleの状態',
@@ -266,7 +269,7 @@ export const assessGoal = (state: GitState, scenario: Scenario, lastCommand?: st
       branch_exists: params.check_detached ? 'Detached HEADになっている' : `ブランチ ${name} が存在する${params.checkedOut ? '、かつそのブランチにいる' : ''}`,
       merge_complete: params.mergedCommit ? `ブランチ ${params.branch} が ${params.mergedCommit} を指す` : 'HEADが複数の親を持つマージコミットである',
       clean_working_tree: fieldLabels.clean, stash_count: `stashが ${params.count ?? 0} 件以上ある`,
-      conflict_present: '作業ツリーに競合が発生している',
+      conflict_present: '実際の統合操作で未解消の競合パスが発生している（文章中のマーカーだけでは達成しない）',
       conflict_resolved: `${name} が許容された解決内容と一致し、すべてのファイルに競合マーカーがない`,
       state_matches: '', github_state: ''
     };

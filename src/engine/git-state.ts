@@ -43,6 +43,7 @@ export const untrackedFiles = (state: GitState): Record<string, string> => {
 };
 
 export const cleanTrackedFiles = (state: GitState) => {
+  if (state.unmergedPaths?.length) return false;
   const head = headTree(state);
   const index = indexTree(state);
   return sameTree(head, index) && Object.keys(head).filter(path => inSparseScope(state, path)).every(path => head[path] === state.workingDirectory[path]);

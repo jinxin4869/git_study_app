@@ -14,7 +14,7 @@ export const lessonNotes: Record<string, LessonNote> = {
   'stash-pop': note('draftを復元し、適用できた保管を一覧から取り除きます。', 'app.tsがdraft、stashが零件であることを確認します。', 'popが競合すると保管は残ります。成功した復元と失敗した復元を区別します。'),
   'stash-select': note('最新ではなく、古いstash@{1}のdraftを選び、二件の保管を残します。', 'app.tsがdraftで、stashの件数が二件のままであることを確認します。', 'stashの番号は新しい保管や削除で変わります。適用前に対象を確認します。'),
   'stash-drop': note('不要な保管を削除し、作業ファイルへは適用しません。', 'stashが零件、app.tsがbaseのままであることを確認します。', 'dropした内容の復旧を保証しません。保管内容が不要かを先に確認します。'),
-  'stash-conflict': note('main更新後の復元は競合します。保管を残し、必要な内容をCombinedへ解消します。', 'app.tsがCombined、HEADがc2、stashが一件残ることを確認します。', 'stashの競合はmergeコミットを作る操作とは異なります。復元結果を読んでから保管を削除します。'),
+  'stash-conflict': note('main更新後の復元は競合します。保管を残し、必要な内容をCombinedへ解消してstageします。', 'app.tsがCombined、HEADがc2、stashが一件残り、git statusのUnmerged pathsがなくなることを確認します。', '内容を編集するだけでは未解消パスは残ります。git addで解消を記録し、復元結果を読んでから保管を削除します。'),
   'interactive-squash': note('Docsの変更とメッセージをFeatureへまとめ、一つの記録として残します。', '二つの内容を保ち、親c1とFeature・Docs両方のメッセージを確認します。', 'todoは画面またはsimulateで編集します。実Gitはエディタを使い、まとめるメッセージも編集できます。'),
   'interactive-fixup': note('Docsの内容をFeatureにまとめ、メッセージはFeatureだけを残します。', '両ファイルの内容と、親c1、メッセージFeatureを確認します。', 'squashとfixupは残すメッセージが違います。共有済み履歴の書き換えは合意が必要です。'),
   'interactive-reword': note('内容と順序を保ちながら、Featureの説明だけをImprove appへ変えます。', '履歴のDocs、Improve app、Initialという順と、両ファイルの内容を確認します。', 'このアプリのrewordは一時停止後にamendします。実Gitではメッセージ用エディタが開きます。'),
