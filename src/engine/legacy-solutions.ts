@@ -37,6 +37,6 @@ export const legacySolutions: Record<string, string[]> = {
   'level-6-3': ['git switch main'],
   'level-7-1': ['git merge feature'],
   'level-7-2': ['git status'],
-  'level-7-3': ['echo "Combined title" > index.html'],
+  'level-7-3': ['echo "<html>\n<body>\n<h1>Hello World</h1>\n</body>\n</html>" > index.html'],
   'level-7-4': ['git add index.html', 'git commit -m "Merge feature"']
 };

@@ -1,5 +1,5 @@
 import { CommandResult, GitState } from '@/types/git';
-import { cleanTrackedFiles, headTree, indexTree, sameTree, sparseTree, untrackedFiles } from './git-state';
+import { cleanTrackedFiles, headTree, indexTree, sameTree, sparseTree, untrackedFiles, dictionary, cloneGitData } from './git-state';
 import { resolveRevision } from './revisions';
 
 const virtualPath = (current: string, input: string) => {
@@ -12,14 +12,14 @@ const virtualPath = (current: string, input: string) => {
 };
 
 export function advancedCommand(state: GitState, command: string, args: string[]): CommandResult | undefined {
-  const success = (message: string): CommandResult => ({ success: true, message, newState: JSON.parse(JSON.stringify(state)) });
+  const success = (message: string): CommandResult => ({ success: true, message, newState: cloneGitData(state) });
   const fail = (message: string): CommandResult => ({ success: false, message });
   if (command === 'worktree' || command === 'cd') {
     if (state.operation || state.pendingMerge || state.bisect) return fail('現在の履歴操作を完了・中断してから作業場所を変更してください。');
     if (state.HEAD.type !== 'branch') return fail('ブランチ上でworktree操作を始めてください。');
     const active = state.activeWorktree ?? '/workspace/project';
-    state.worktrees ??= {};
-    state.worktrees[active] = { branch: state.HEAD.value, workingDirectory: { ...state.workingDirectory }, index: JSON.parse(JSON.stringify(state.index)) };
+    state.worktrees ??= dictionary();
+    state.worktrees[active] = { branch: state.HEAD.value, workingDirectory: { ...state.workingDirectory }, index: cloneGitData(state.index) };
     state.activeWorktree = active;
     if (command === 'cd') {
       const target = virtualPath(active, args[0] ?? '');
@@ -28,7 +28,7 @@ export function advancedCommand(state: GitState, command: string, args: string[]
       state.activeWorktree = target;
       state.HEAD = { type: 'branch', value: worktree.branch };
       state.workingDirectory = { ...worktree.workingDirectory };
-      state.index = JSON.parse(JSON.stringify(worktree.index));
+      state.index = cloneGitData(worktree.index);
       return success(`仮想作業場所: ${target}`);
     }
     if (args[0] === 'list') return success(Object.entries(state.worktrees).map(([path, tree]) => `${path} ${state.branches[tree.branch]} [${tree.branch}]`).join('\n'));
@@ -50,13 +50,13 @@ export function advancedCommand(state: GitState, command: string, args: string[]
     const id = resolveRevision(state, start);
     if (!id || (at >= 0 && state.branches[name])) return fail('開始位置か新規ブランチ名が無効です。');
     state.branches[name] ??= id;
-    state.worktrees[path] = { branch: name, workingDirectory: { ...state.commits[state.branches[name]].tree }, index: {} };
+    state.worktrees[path] = { branch: name, workingDirectory: { ...state.commits[state.branches[name]].tree }, index: dictionary() };
     return success(`仮想worktree ${path} を作成しました。cd ${path} で移動できます。`);
   }
   if (command === 'bisect') {
     if (args[0] === 'start') {
       if (state.bisect || state.operation || state.pendingMerge || !cleanTrackedFiles(state)) return fail('変更を保存し、進行中の操作を終了してください。');
-      state.bisect = { original: JSON.parse(JSON.stringify(state)) };
+      state.bisect = { original: cloneGitData(state) };
       return success('bisectを開始しました。badとgoodのコミットを指定してください。');
     }
     const bisect = state.bisect;
@@ -66,7 +66,7 @@ export function advancedCommand(state: GitState, command: string, args: string[]
       const untracked = untrackedFiles(state);
       if (Object.keys(untracked).some(path => headTree(bisect.original)[path] !== undefined)) return fail('Untracked files would be overwritten.');
       const found = bisect.found;
-      Object.assign(state, JSON.parse(JSON.stringify(bisect.original)), { lastBisectFound: found });
+      Object.assign(state, cloneGitData(bisect.original), { lastBisectFound: found });
       delete state.bisect;
       state.workingDirectory = { ...sparseTree(state, headTree(state)), ...untracked };
       return success('bisect前の作業場所に戻りました。');
@@ -91,7 +91,7 @@ export function advancedCommand(state: GitState, command: string, args: string[]
     if (chain.length === 1) bisect.found = candidate;
     state.HEAD = { type: 'commit', value: candidate };
     state.detachedHead = true;
-    state.index = {};
+    state.index = dictionary();
     state.workingDirectory = { ...sparseTree(state, state.commits[candidate].tree), ...untracked };
     return success(bisect.found ? `${candidate} is the first bad commit` : `候補 ${candidate} を検証してgoodまたはbadを指定してください。`);
   }
@@ -107,7 +107,7 @@ export function advancedCommand(state: GitState, command: string, args: string[]
     return success('指定したディレクトリとルートのファイルを展開しました。');
   }
   if (command === 'submodule') {
-    state.submodules ??= {};
+    state.submodules ??= dictionary();
     if (args[0] === 'status') return success(Object.entries(state.submodules).map(([path, module]) => `${module.initialized ? indexTree(state)[path] === `Subproject commit ${module.commitId}` ? ' ' : '+' : '-'}${module.commitId} ${path}`).join('\n'));
     if (args[0] === 'add') {
       const [, url, path] = args;

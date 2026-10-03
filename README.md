@@ -57,8 +57,10 @@ gh pr merge 1 --merge
 
 ## 動作環境
 
--   Node.js 20 または22、24以上（テストを含む）
+-   Node.js 20.19以上の20系、22.12以上の22系、または24以上（テストを含む）。CIと同じ22系の最新パッチを推奨します。
 -   npm, yarn, pnpm, または bun
+
+依存関係の更新履歴と監査結果は[依存関係のセキュリティ更新](docs/dependency_security_updates.md)を参照してください。
 
 ## セットアップ手順
 
@@ -74,7 +76,7 @@ cd git_study_app
 ### 2. 依存関係のインストール
 
 ```bash
-npm install
+npm ci
 ```
 
 ### 3. 開発サーバーの起動

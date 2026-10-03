@@ -96,7 +96,13 @@ export const checkGoal = (currentState: GitState, scenario: Scenario, lastComman
     return true;
   }
   if (goal.type === 'conflict_present') return Object.values(currentState.workingDirectory).some(content => content.includes('<<<<<<< HEAD'));
-  if (goal.type === 'conflict_resolved') return currentState.workingDirectory[goal.params?.name as string] !== undefined && !Object.values(currentState.workingDirectory).some(content => content.includes('<<<<<<< HEAD'));
+  if (goal.type === 'conflict_resolved') {
+    const content = currentState.workingDirectory[goal.params?.name as string];
+    const accepted = goal.params?.acceptedContents;
+    return content !== undefined && Array.isArray(accepted) &&
+      accepted.some(expected => typeof expected === 'string' && content.trim() === expected.trim()) &&
+      !Object.values(currentState.workingDirectory).some(text => /^(<<<<<<<|=======|>>>>>>>)/m.test(text));
+  }
   
   if (goal.type === 'repo_initialized') {
       return !!lastCommand && normalizeCommand(lastCommand) === 'init';

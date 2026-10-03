@@ -1,5 +1,5 @@
 import { GitState } from '@/types/git';
-import { headId } from './git-state';
+import { headId, cloneGitData } from './git-state';
 
 export function resolveRevision(state: GitState, value: string): string | undefined {
   const reflog = value.match(/^HEAD@\{([0-9]+)\}$/);
@@ -41,7 +41,7 @@ export function copyHistory(source: GitState['commits'], destination: GitState['
     visited.add(id);
     const commit = source[id];
     if (!commit) continue;
-    destination[id] = JSON.parse(JSON.stringify(commit));
+    destination[id] = cloneGitData(commit);
     pending.push(...commit.parents);
   }
 }

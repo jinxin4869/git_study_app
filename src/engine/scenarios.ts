@@ -10,6 +10,10 @@ import { advancedScenarios } from './advanced-scenarios';
 import { precisionScenarios } from './precision-scenarios';
 import { workflowScenarios } from './workflow-scenarios';
 
+const resolvedWorld = '<html>\n<body>\n<h1>Hello World</h1>\n</body>\n</html>';
+const resolvedGit = '<html>\n<body>\n<h1>Hello Git</h1>\n</body>\n</html>';
+const resolvedBoth = '<html>\n<body>\n<h1>Hello World</h1>\n<h1>Hello Git</h1>\n</body>\n</html>';
+
 export const scenarios: Scenario[] = [
   {
     id: 'level-1-1',
@@ -1051,7 +1055,7 @@ export const scenarios: Scenario[] = [
   {
     id: 'level-7-3',
     title: 'Level 7-3: コンフリクトの解消',
-    description: 'ファイルを開いてコンフリクトを解消してください。',
+    description: 'ファイルを開き、HTML全体を残したままWorld側・Git側・両方のいずれかを選んでコンフリクトを解消してください。',
     difficulty: 'advanced',
     initialState: {
       commits: {
@@ -1062,7 +1066,7 @@ export const scenarios: Scenario[] = [
       branches: { 'main': 'c2', 'feature': 'c3' },
       HEAD: { type: 'branch', value: 'main' },
       index: {},
-      workingDirectory: { 'index.html': '<<<<<<< HEAD\n<html>\n<body>\n<h1>Hello World</h1>\n</body>\n</html>\n=======\n<html>\n<body>\n<h1>Hello Git</h1>\n</body>\n</html>\n>>>>>>> feature' },
+      workingDirectory: { 'index.html': '<html>\n<body>\n<<<<<<< HEAD\n<h1>Hello World</h1>\n=======\n<h1>Hello Git</h1>\n>>>>>>> feature\n</body>\n</html>' },
       detachedHead: false,
       stash: [],
       remotes: {},
@@ -1071,7 +1075,7 @@ export const scenarios: Scenario[] = [
     },
     goal: {
       type: 'conflict_resolved',
-      params: { name: 'index.html' }
+      params: { name: 'index.html', acceptedContents: [resolvedWorld, resolvedGit, resolvedBoth] }
     },
     hints: [
       '右側のファイルツリーから `index.html` をクリックします。',
