@@ -18,7 +18,7 @@ export const operationScenarios: Scenario[] = [
   lesson('operation-rebase-abort', 'rebaseを中断して元へ戻す', '競合したrebaseを中断し、元のfeatureと作業ファイルへ戻してください。', { HEAD: { type: 'branch', value: 'feature' }, workingDirectory: c3.tree },
     { command: 'rebase --abort', operation: null, branch: 'feature', head: 'c3', working: c3.tree }, ['git rebase main', 'git rebase --abort'], ['git rebase main']),
   lesson('operation-pick-continue', 'cherry-pickの競合を解消', 'c3をmainへ移植すると競合します。Resolvedに解消してステージし、移植を完了してください。', {},
-    { operation: null, parents: ['c2'], message: 'Feature', tree: { 'app.ts': 'Resolved' } }, ['git cherry-pick c3', 'echo "Resolved" > app.ts', 'git add app.ts', 'git cherry-pick --continue'], ['git cherry-pick c3']),
+    { operation: null, branch: 'main', parents: ['c2'], message: 'Feature', tree: { 'app.ts': 'Resolved' } }, ['git cherry-pick c3', 'echo "Resolved" > app.ts', 'git add app.ts', 'git cherry-pick --continue'], ['git cherry-pick c3']),
   lesson('operation-pick-abort', 'cherry-pickを中断', '競合した移植を中断し、元のmainの内容を取り戻してください。', {},
     { command: 'cherry-pick --abort', operation: null, head: 'c2', working: c2.tree }, ['git cherry-pick c3', 'git cherry-pick --abort'], ['git cherry-pick c3']),
   lesson('operation-revert-continue', 'revertの競合を解消', 'c2をrevertすると後続の編集と競合します。app.tsをbaseに解消し、取り消しコミットを作成してください。', { branches: { main: 'c4', feature: 'c3' }, workingDirectory: c4.tree },

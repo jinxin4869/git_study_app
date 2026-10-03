@@ -19,7 +19,7 @@ export function FilePreview({ file, onClose }: FilePreviewProps) {
         <button
           onClick={onClose}
           className="flex min-h-11 min-w-11 shrink-0 items-center justify-center hover:bg-gray-700 rounded-md text-gray-400 hover:text-gray-200 transition-colors"
-          aria-label="Close preview"
+          aria-label="プレビューを閉じる"
         >
           <X className="w-4 h-4" />
         </button>

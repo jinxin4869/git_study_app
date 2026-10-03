@@ -26,17 +26,17 @@ test('learn without hints, persist completion and filters, restore only exercise
   await expect(page.getByText('Hint:', { exact: false })).toHaveCount(0);
   await page.getByLabel('学習コース').selectOption({ label: '基本操作' });
   await run(page, 'git status');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
   await run(page, 'echo "unsaved Git state" > README.md');
   await page.reload();
   await expect(page.getByLabel('演習を検索')).toHaveValue('Level 1-3');
   await expect(page.getByLabel('学習コース')).toHaveValue('基本操作');
   await expect(page.getByRole('button', { name: /Level 1-3/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: /Level 1-3/ })).toContainText('完了済み');
-  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'README.mdを開く' }).click();
   await expect(page.locator('pre')).toHaveText('');
-  await page.getByRole('button', { name: 'Close preview' }).click();
+  await page.getByRole('button', { name: 'プレビューを閉じる' }).click();
   await expect(page.getByRole('button', { name: 'README.mdを開く' })).toBeFocused();
 });
 
@@ -64,7 +64,7 @@ test('reset preserves completion; per-exercise deletion and full deletion do not
   await expect(page.getByRole('button', { name: /Level 1-3/ })).not.toContainText('完了済み');
   await page.getByRole('button', { name: 'README.mdを開く' }).click();
   await expect(page.locator('pre')).toHaveText('keep current');
-  await page.getByRole('button', { name: 'Close preview' }).click();
+  await page.getByRole('button', { name: 'プレビューを閉じる' }).click();
   await page.reload();
   await expect(page.getByRole('button', { name: /Level 1-3/ })).toHaveAttribute('aria-pressed', 'true');
   await deleteRecords(page, 'all');
@@ -81,7 +81,7 @@ test('invalid ids and corrupt records show recovery without crashing', async ({ 
   await expect(page.getByRole('main').getByRole('alert')).toContainText('演習IDが無効');
   await expect(page.getByRole('main').getByRole('alert')).toContainText('保存データ');
   await choose(page, 'Level 1-3'); await run(page, 'git status');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '保存を再試行' }).click();
   await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
 });
@@ -94,7 +94,7 @@ test('unknown format is preserved until explicit deletion', async ({ page }) => 
   await deleteRecords(page, 'all');
   await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
   await run(page, 'git status');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
 });
 
 test('quota failure retains in-memory achievement and retry saves it', async ({ page }) => {
@@ -107,7 +107,7 @@ test('quota failure retains in-memory achievement and retry saves it', async ({ 
     };
   });
   await page.goto('/game'); await choose(page, 'Level 1-3'); await run(page, 'git status');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
   await expect(page.getByRole('main').getByRole('alert')).toContainText('容量');
   await page.evaluate(() => { (window as unknown as { allowSave: boolean }).allowSave = true; });
   await page.getByRole('button', { name: '保存を再試行' }).click();
@@ -135,13 +135,13 @@ test('IME composition and keyCode 229 do not submit, command attributes are appr
   await input.fill('git status');
   await input.dispatchEvent('compositionstart');
   await input.press('Enter');
-  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
   await expect(input).toHaveValue('git status');
   await input.dispatchEvent('compositionend');
   const prevented = await input.evaluate(element => !element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 229, bubbles: true, cancelable: true })));
   expect(prevented).toBe(true);
   await input.press('Enter');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
   for (const [name, value] of [['autocapitalize', 'none'], ['autocorrect', 'off'], ['autocomplete', 'off'], ['spellcheck', 'false']]) await expect(input).toHaveAttribute(name, value);
   await expect(page.getByRole('status').filter({ hasText: '達成条件を満たしました' })).toBeAttached();
 });
@@ -150,7 +150,7 @@ test('failed attempts explain unmet requirements and operation actions populate 
   await page.goto('/game'); await choose(page, 'Level 1-3');
   await run(page, 'git status --not-a-real-option');
   await expect(page.getByRole('list', { name: '達成条件' })).toContainText('未達: 最後の操作');
-  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
   await choose(page, 'Level 7-1'); await run(page, 'git merge feature');
   const guide = page.getByRole('region', { name: '操作中の状態' });
   await expect(guide).toContainText('merge 中');
@@ -166,12 +166,12 @@ test('keyboard opens and closes nested previews and conflict panels with focus r
   await page.getByRole('button', { name: 'folderフォルダ' }).focus(); await page.keyboard.press('Enter');
   const file = page.getByRole('button', { name: 'folder/file.txtを開く' });
   await file.focus(); await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: 'Close preview' })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'プレビューを閉じる' })).toBeFocused();
   await page.keyboard.press('Escape'); await expect(file).toBeFocused();
   await choose(page, 'Level 7-3');
   const conflict = page.getByRole('button', { name: 'index.htmlを開く' });
   await conflict.focus(); await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'キャンセル', exact: true })).toBeFocused();
   await page.keyboard.press('Escape'); await expect(conflict).toBeFocused();
 });
 
@@ -180,7 +180,7 @@ test('denied storage keeps the exercise usable and reports unsaved completion', 
   await page.goto('/game');
   await expect(page.getByRole('main').getByRole('alert')).toContainText('保存領域');
   await choose(page, 'Level 1-3'); await run(page, 'git status');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
   await expect(page.getByRole('main').getByRole('alert')).toContainText('保存領域');
   await page.getByRole('button', { name: '保存を再試行' }).click();
   await expect(page.getByRole('main').getByRole('alert')).toContainText('アクセスできません');
@@ -190,7 +190,12 @@ test('keyboard search, selection, hint and missing-file focus fallback', async (
   await page.goto('/game');
   const search = page.getByLabel('演習を検索');
   await search.focus(); await page.keyboard.type('Level 1-3');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: '基本操作から始める' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: '自由練習に切り替える' })).toBeFocused();
   await page.keyboard.press('Tab'); // Closed save disclosure.
+  await expect(page.getByText('保存と再開', { exact: true })).toBeFocused();
   await page.keyboard.press('Tab'); // The sole search result.
   await expect(page.getByRole('button', { name: /Level 1-3/ })).toBeFocused();
   await page.keyboard.press('Enter');
@@ -200,7 +205,7 @@ test('keyboard search, selection, hint and missing-file focus fallback', async (
   await expect(page.getByRole('heading', { name: '1. 考え方' })).toBeVisible();
   await page.getByRole('button', { name: 'README.mdを開く' }).focus(); await page.keyboard.press('Enter');
   await run(page, 'rm README.md');
-  await page.getByRole('button', { name: 'Close preview' }).focus(); await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'プレビューを閉じる' }).focus(); await page.keyboard.press('Escape');
   await expect(page.getByRole('textbox', { name: '演習コマンド' })).toBeFocused();
 });
 

@@ -7,6 +7,7 @@ import { advancedCommand } from './advanced-simulator';
 import { isIgnored } from './gitignore';
 import { diffLines } from 'diff';
 import { fileStates } from './file-states';
+import { tokenizeCommand, validateCommandOptions } from './command-input';
 
 export interface ConflictResolutionSession {
   path: string;
@@ -91,40 +92,52 @@ export class GitEngine {
   public execute(command: string): CommandResult {
     const previousState = this.getState();
     const previousRevision = this.revision;
-    const previousId = this.resolveHeadCommitId();
-    const previousHead = { ...this.state.HEAD };
-    const result = this.executeCommand(command);
-    if (!result.success && !result.newState) this.state = previousState;
-    const currentId = this.resolveHeadCommitId();
-    if ((result.success || result.newState) && currentId && (currentId !== previousId || this.state.HEAD.value !== previousHead.value || this.state.HEAD.type !== previousHead.type)) {
-      if (!this.state.reflog) this.state.reflog = previousId ? [{ id: previousId, command: 'initial state' }] : [];
-      this.state.reflog.unshift({ id: currentId, command });
+    try {
+      const previousId = this.resolveHeadCommitId();
+      const previousHead = { ...this.state.HEAD };
+      const result = this.executeCommand(command);
+      if (!result.success && !result.newState) this.state = previousState;
+      const currentId = this.resolveHeadCommitId();
+      if ((result.success || result.newState) && currentId && (currentId !== previousId || this.state.HEAD.value !== previousHead.value || this.state.HEAD.type !== previousHead.type)) {
+        if (!this.state.reflog) this.state.reflog = previousId ? [{ id: previousId, command: 'initial state' }] : [];
+        this.state.reflog.unshift({ id: currentId, command });
+      }
+      // Normalize dictionaries introduced by commands before exposing the next snapshot.
+      this.state = normalizeGitData(this.state);
+      if (result.newState) {
+        const untracked = untrackedFiles(this.state);
+        this.state.workingDirectory = dictionary({ ...sparseTree(this.state, this.state.workingDirectory), ...untracked });
+        result.newState = this.getState();
+      }
+      // Read-only and rejected commands retain decisions; any state change invalidates old drafts.
+      this.revision = previousRevision + (JSON.stringify(previousState) !== JSON.stringify(this.state) ? 1 : 0);
+      return result;
+    } catch {
+      this.state = previousState;
+      this.revision = previousRevision;
+      return { success: false, message: '予期しないエラーが起きたため、このコマンドの直前へ戻しました。入力を確認するか演習をリセットしてください。' };
     }
-    // Normalize dictionaries introduced by commands before exposing the next snapshot.
-    this.state = normalizeGitData(this.state);
-    if (result.newState) {
-      const untracked = untrackedFiles(this.state);
-      this.state.workingDirectory = dictionary({ ...sparseTree(this.state, this.state.workingDirectory), ...untracked });
-      result.newState = this.getState();
-    }
-    // Read-only and rejected commands retain decisions; any state change invalidates old drafts.
-    this.revision = previousRevision + (JSON.stringify(previousState) !== JSON.stringify(this.state) ? 1 : 0);
-    return result;
   }
 
   private executeCommand(command: string): CommandResult {
-    const tokens = command.trim().match(/"(?:\\.|[^"\\])*"|'[^']*'|[^\s]+/g) || [];
-    const parts = tokens.map(token => /^['"]/.test(token) ? token.slice(1, -1) : token);
-    if (this.state.patchSession) return ['y', 'n', 'q'].includes(parts[0]) ? this.answerPatch(parts[0]) : { success: false, message: 'ハンクをy/nで選ぶか、qで終了してください。' };
+    const parsed = tokenizeCommand(command);
+    if (parsed.error) return { success: false, message: parsed.error };
+    const parts = parsed.tokens.map(token => token.text);
+    if (parts[0] !== 'echo' && parsed.tokens.some(token => token.redirect)) return { success: false, message: 'このアプリの出力リダイレクトはecho "内容" > ファイルだけに対応しています。' };
+    if (this.state.patchSession) return parts.length === 1 && ['y', 'n', 'q'].includes(parts[0]) ? this.answerPatch(parts[0]) : { success: false, message: 'ハンクをy/nで選ぶか、qで終了してください。' };
     if (parts[0] === 'cd') return advancedCommand(this.state, 'cd', parts.slice(1))!;
     if (parts[0] === 'simulate' && parts[1] === 'rebase' && parts[2] === 'todo') return this.setRebaseTodo(parts.slice(3).join(' ').split(';').join('\n'));
-    if (parts[0] === 'gh' || parts[0] === 'simulate') return githubCommand(this.state, parts.slice(1), parts[0] === 'simulate');
-    if (parts[0] === 'ls') return { success: true, message: Object.keys(this.state.workingDirectory).sort().join('\n') };
+    if (parts[0] === 'gh' || parts[0] === 'simulate') {
+      const error = validateCommandOptions(parts.slice(0, 3).join(' '), parts.slice(3));
+      if (error) return { success: false, message: error };
+      return githubCommand(this.state, parts.slice(1), parts[0] === 'simulate');
+    }
+    if (parts[0] === 'ls') return parts.length === 1 ? { success: true, message: Object.keys(this.state.workingDirectory).sort().join('\n') } : { success: false, message: 'このアプリは引数なしのlsに対応しています。' };
     
     // 非Gitコマンドの処理
     if (parts[0] === 'touch') {
       const filename = parts[1];
-      if (!filename) return { success: false, message: 'usage: touch <filename>' };
+      if (!filename || parts.length !== 2) return { success: false, message: 'usage: touch <filename>（このアプリでは一つのファイルを指定）' };
       if (!inSparseScope(this.state, filename)) return { success: false, message: '先にsparse-checkoutの対象を広げてください。' };
       // touchのシミュレーション: 存在しない場合は作成、存在する場合はタイムスタンプ更新（内容は変更なし）
       if (this.state.workingDirectory[filename] === undefined) {
@@ -136,20 +149,15 @@ export class GitEngine {
 
     if (parts[0] === 'echo') {
       // echo "content" > filename の簡易パース
-      const redirectIndex = parts.indexOf('>');
-      if (redirectIndex === -1 || redirectIndex === parts.length - 1) {
+      const redirectIndex = parsed.tokens.findIndex(token => token.redirect);
+      if (redirectIndex < 1 || redirectIndex !== parts.length - 2 || parsed.tokens.filter(token => token.redirect).length !== 1) {
         return { success: false, message: 'usage: echo "content" > <filename>' };
       }
       
       const filename = parts[redirectIndex + 1];
       if (!inSparseScope(this.state, filename)) return { success: false, message: '先にsparse-checkoutの対象を広げてください。' };
       // echo と > の間の部分を結合
-      let content = parts.slice(1, redirectIndex).join(' ');
-      
-      // 引用符があれば削除
-      if ((content.startsWith('"') && content.endsWith('"')) || (content.startsWith("'") && content.endsWith("'"))) {
-        content = content.slice(1, -1);
-      }
+      const content = parts.slice(1, redirectIndex).join(' ');
       
       this.touch(filename, content);
       return { success: true, message: '', newState: this.state };
@@ -157,7 +165,7 @@ export class GitEngine {
 
     if (parts[0] === 'rm') {
       const path = parts[1];
-      if (!path || this.state.workingDirectory[path] === undefined) return { success: false, message: 'rm: file not found' };
+      if (!path || parts.length !== 2 || this.state.workingDirectory[path] === undefined) return { success: false, message: 'rm: 一つの存在するファイルを指定してください。' };
       delete this.state.workingDirectory[path];
       return { success: true, message: '', newState: this.getState() };
     }
@@ -168,6 +176,9 @@ export class GitEngine {
 
     const cmd = parts[1];
     const args = parts.slice(2);
+    const optionError = validateCommandOptions(cmd, args);
+    if (optionError) return { success: false, message: optionError };
+    if (cmd === 'init' && args.length) return { success: false, message: 'このアプリは引数なしのgit initに対応しています。' };
     const advanced = advancedCommand(this.state, cmd, args);
     if (advanced) return advanced;
 
@@ -741,6 +752,13 @@ export class GitEngine {
   }
 
   private log(args: string[] = []): CommandResult {
+    const separatorAt = args.indexOf('--');
+    const options = separatorAt < 0 ? args : args.slice(0, separatorAt);
+    for (let i = 0; i < options.length; i++) {
+      if (options[i] === '--grep') { i++; continue; }
+      if (!['--oneline', '--graph', '--all'].includes(options[i])) return { success: false, message: 'このアプリはlogの--oneline、--graph、--all、--grep <文字列>、-- <一つのパス>に対応しています。' };
+    }
+    if (separatorAt >= 0 && args.length !== separatorAt + 2) return { success: false, message: 'logの -- の後に一つのパスを指定してください。' };
     const currentCommitId = this.resolveHeadCommitId();
     if (!currentCommitId) {
       return { success: false, message: "fatal: your current branch 'main' does not have any commits yet" };
@@ -805,6 +823,7 @@ export class GitEngine {
   }
 
   private show(args: string[]): CommandResult {
+    if (args.length > 1) return { success: false, message: 'このアプリはshow [コミットまたはコミット:パス]に対応しています。' };
     const value = args[0] ?? 'HEAD';
     const [reference, path] = value.split(':');
     const id = resolveRevision(this.state, reference);
@@ -1077,7 +1096,7 @@ export class GitEngine {
   private restore(args: string[]): CommandResult {
     const staged = args.includes('--staged') || args.includes('-S');
     const worktree = !staged || args.includes('--worktree') || args.includes('-W');
-    const sourceAt = args.indexOf('-s');
+    const sourceAt = args.includes('-s') ? args.indexOf('-s') : args.indexOf('--source');
     const explicit = args.find(arg => arg.startsWith('--source='))?.slice('--source='.length) ?? (sourceAt >= 0 ? args[sourceAt + 1] : undefined);
     const id = explicit ? resolveRevision(this.state, explicit) : undefined;
     if (explicit && !id) return { success: false, message: 'Source revision not found.' };

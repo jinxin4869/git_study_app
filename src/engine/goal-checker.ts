@@ -16,6 +16,9 @@ const matchesGoal = (currentState: GitState, scenario: Scenario, lastCommand?: s
     if (expected.review && (pr.review?.commitId !== latest || pr.review.result !== expected.review)) return false;
     if (expected.checks && (pr.checks?.commitId !== latest || pr.checks.status !== expected.checks)) return false;
     if (expected.title && pr.title !== expected.title) return false;
+    if (expected.headBranch && pr.head !== expected.headBranch) return false;
+    if (expected.baseBranch && pr.base !== expected.baseBranch) return false;
+    if (expected.bodyNonEmpty && !pr.body.trim()) return false;
     if (expected.tree) {
       const tree = currentState.mockServers.origin?.commits[currentState.mockServers.origin.branches[pr.base]]?.tree;
       if (!tree || Object.entries(expected.tree as Record<string, string>).some(([path, content]) => tree[path] !== content)) return false;
@@ -50,6 +53,30 @@ const matchesGoal = (currentState: GitState, scenario: Scenario, lastCommand?: s
     }
     const id = currentState.HEAD.type === 'branch' ? currentState.branches[currentState.HEAD.value] : currentState.HEAD.value;
     const commit = currentState.commits[id];
+    if (expected.detached !== undefined && (currentState.HEAD.type === 'commit') !== expected.detached) return false;
+    if (expected.workingPresent && (expected.workingPresent as string[]).some(path => currentState.workingDirectory[path] === undefined)) return false;
+    if (expected.committedFiles && (expected.committedFiles as string[]).some(path => commit?.tree[path] === undefined)) return false;
+    if (expected.commitCount !== undefined) {
+      let cursor = id;
+      const visited = new Set<string>();
+      while (cursor && currentState.commits[cursor] && !visited.has(cursor)) {
+        visited.add(cursor);
+        cursor = currentState.commits[cursor].parents[0];
+      }
+      if (visited.size < Number(expected.commitCount)) return false;
+    }
+    if (expected.historyTrees) {
+      let cursor = id;
+      for (const files of expected.historyTrees as Record<string, string | null>[]) {
+        const item = currentState.commits[cursor];
+        if (!item || Object.entries(files).some(([path, content]) => content === null ? item.tree[path] !== undefined : item.tree[path] !== content)) return false;
+        cursor = item.parents[0];
+      }
+    }
+    if (expected.acceptedTreeContents && Object.entries(expected.acceptedTreeContents as Record<string, string[]>).some(([path, accepted]) => {
+      const content = commit?.tree[path];
+      return content === undefined || !accepted.some(value => value.trim() === content.trim());
+    })) return false;
     if (expected.head !== undefined && id !== expected.head) return false;
     if (expected.branch !== undefined && (currentState.HEAD.type !== 'branch' || currentState.HEAD.value !== expected.branch)) return false;
     if (expected.message !== undefined && commit?.message !== expected.message) return false;
@@ -201,7 +228,11 @@ const fieldLabels: Record<string, string> = {
   remoteTree: '模擬サーバーのファイル内容', tagMessages: '注釈付きタグのメッセージ', tagBranches: 'タグとブランチの一致',
   serverTagBranches: '公開済みタグとローカルブランチの一致', branchTrees: '各ブランチのコミット内容', missingCommitted: 'コミットから除くファイル',
   tree: 'HEADのファイル内容（nullは不在）', working: '作業ツリーの内容（nullは不在）', index: 'indexの内容（nullは不在）',
-  status: 'PRの状態', review: '最新の公開コミットに対するレビュー', checks: '最新の公開コミットに対するCI', title: 'PRのタイトル'
+  status: 'PRの状態', review: '最新の公開コミットに対するレビュー', checks: '最新の公開コミットに対するCI', title: 'PRのタイトル',
+  headBranch: 'PRの提案元ブランチ', baseBranch: 'PRの統合先ブランチ', bodyNonEmpty: 'PRの説明が空でない',
+  detached: 'Detached HEADの状態', workingPresent: '作業ツリーに存在するファイル', committedFiles: 'HEADに記録するファイル',
+  commitCount: 'HEADから第一親をたどるコミット数の下限', historyTrees: 'HEADから第一親へ続く各コミットのファイル内容',
+  acceptedTreeContents: 'コミットに保つ許容された解決内容'
 };
 
 /** The displayed requirements and pass/fail use the same existing state predicates. */
@@ -216,8 +247,12 @@ export const assessGoal = (state: GitState, scenario: Scenario, lastCommand?: st
     }
     for (const [key, value] of Object.entries(params)) {
       if (key === 'number' || key === 'remoteBranch') continue; // Context for other predicates, not a requirement on its own.
+      if (!Object.hasOwn(fieldLabels, key)) {
+        conditions.push({ id: key, label: `教材に未対応の採点条件があります: ${key}。演習を選び直してください。`, met: false });
+        continue;
+      }
       const label = key === 'operation' && value === null ? '進行中の履歴操作を終了する' :
-        key === 'clean' ? fieldLabels.clean : `${fieldLabels[key] ?? key}: ${describeValue(value)}`;
+        key === 'clean' ? fieldLabels.clean : `${goal.type === 'github_state' && key === 'tree' ? '模擬PRの統合先に記録されたファイル内容' : fieldLabels[key]}: ${describeValue(value)}`;
       add(key, label, { type: goal.type, params: { [key]: value, number: params.number, remoteBranch: params.remoteBranch } });
     }
   } else {

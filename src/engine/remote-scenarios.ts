@@ -20,16 +20,16 @@ const diverged = { commits: { c1, c3 }, branches: { main: 'c3' }, workingDirecto
 
 export const remoteScenarios: Scenario[] = [
   lesson('remote-clone', 'プロジェクトを取得', 'mock://team/projectをcloneし、最新mainのファイルを取得してください。外部通信は発生しません。', { commits: {}, branches: { main: '' }, workingDirectory: {}, remoteBranches: {} },
-    { head: 'c2', working: { 'app.ts': 'version 2' }, upstreams: { main: 'origin/main' } }, ['git clone mock://team/project']),
+    { branch: 'main', head: 'c2', working: { 'app.ts': 'version 2' }, upstreams: { main: 'origin/main' } }, ['git clone mock://team/project']),
   lesson('remote-list', '接続先を確認', 'fetchとpushの接続先URLを確認してください。', {}, {}, ['git remote -v'], 'remote -v'),
   lesson('remote-add', '接続先を登録', 'originがないリポジトリへ仮想接続先を登録してください。', { remotes: {}, mockServers: {}, remoteBranches: {} },
     { remotes: { origin: 'mock://team/project' } }, ['git remote add origin mock://team/project']),
   lesson('remote-url', '接続先URLを変更', '移転したプロジェクトへ接続先URLを変更してください。', {},
     { remotes: { origin: 'mock://team/new-project' } }, ['git remote set-url origin mock://team/new-project']),
   lesson('remote-fetch', '作業を変えずに更新を取得', 'origin/mainをc2へ更新します。ローカルmainと作業ファイルはc1のまま維持してください。', {},
-    { head: 'c1', remoteBranches: { 'origin/main': 'c2' }, working: { 'app.ts': 'version 1' } }, ['git fetch origin']),
+    { branch: 'main', head: 'c1', remoteBranches: { 'origin/main': 'c2' }, working: { 'app.ts': 'version 1' } }, ['git fetch origin']),
   lesson('remote-pull', 'mainを最新にする', '他メンバーの更新を取得し、mainをfast-forwardしてください。', {},
-    { head: 'c2', working: { 'app.ts': 'version 2' }, clean: true }, ['git pull --ff-only origin main']),
+    { branch: 'main', head: 'c2', working: { 'app.ts': 'version 2' }, clean: true }, ['git pull --ff-only origin main']),
   lesson('remote-first-push', '初回pushと追跡設定', 'ローカルmainを空の仮想リモートへpushし、追跡先も設定してください。', { mockServers: { origin: { commits: {}, branches: {} } }, remoteBranches: {} },
     { serverBranches: { main: 'c1' }, upstreams: { main: 'origin/main' } }, ['git push -u origin main']),
   lesson('remote-push', '共有済みmainへ変更を送る', '追加済みのローカル文書コミットを、最新の仮想リモートへpushしてください。', { ...diverged, mockServers: { origin: { commits: { c1 }, branches: { main: 'c1' } } } },
@@ -39,7 +39,7 @@ export const remoteScenarios: Scenario[] = [
   lesson('remote-rebase', 'rebaseで最新mainに追従', '最新origin/mainへローカルの文書コミットを載せ替えてからpushしてください。', diverged,
     { historyMessages: ['Local docs', 'Team update', 'Initial'], remoteTree: { 'app.ts': 'version 2', 'README.md': 'Local docs' } }, ['git pull --rebase origin main', 'git push origin main']),
   lesson('remote-prune', '削除済み追跡ブランチを整理', 'リモートでは削除済みのorigin/obsoleteをローカルの追跡一覧から取り除いてください。ローカルmainは変えません。', { remoteBranches: { 'origin/main': 'c1', 'origin/obsolete': 'c1' } },
-    { head: 'c1', remoteBranches: { 'origin/obsolete': null, 'origin/main': 'c2' } }, ['git fetch --prune origin']),
+    { branch: 'main', head: 'c1', remoteBranches: { 'origin/obsolete': null, 'origin/main': 'c2' } }, ['git fetch --prune origin']),
   lesson('remote-remove', '接続先を削除', '使わなくなったoriginを削除し、関連する追跡参照も整理してください。', {},
     { remotes: { origin: null }, remoteBranches: { 'origin/main': null } }, ['git remote remove origin'])
 ];

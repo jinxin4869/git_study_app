@@ -24,3 +24,23 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), var(--font-japanese), sans-serif;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+  }
+  .transition-all, .transition-transform {
+    transition-property: color, background-color, border-color, opacity;
+    transition-duration: 0s;
+  }
+  .hover\:scale-105:hover, .group-hover\:translate-x-1 {
+    transform: none !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .bg-clip-text {
+    background: none;
+    color: CanvasText;
+  }
+}
