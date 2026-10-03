@@ -47,3 +47,20 @@ Dependabotはnpm/GitHub Actionsの更新を月次で通知する。npmのminor/p
 月次と依存更新時に `npm audit` と `npm audit --omit=dev`、eslint pluginのpeerDependencies、Actions告知を確認する。未修正bracesのHigh 5経路は、件数を減らすためのダウングレードや検査の無効化で隠さない。詳細は [依存更新記録](dependency_security_updates.md)。通常の公開smokeは明示実行とし、外部学習ログ収集・有料監視サービスを導入しない。
 
 CIのOSメジャーは `ubuntu-24.04` として固定し、runnerのパッチイメージは通常更新される。ubuntu-latestのOSメジャー移行でWebKitのOS依存が変わることを避け、OS更新は公式runner/Playwright対応と6構成テストを確認して別PRで行う。
+
+## PR #6取込後の公開確認（2026-10-03 JST）
+
+[PR #6](https://github.com/jinxin4869/git_study_app/pull/6)は2026-10-03 07:26:09 UTCにマージ済み。マージSHAは `cd3272dbff8f8be486b2acf4fb56cf34b3b45d14`。mainの [Tests 37106344391](https://github.com/jinxin4869/git_study_app/actions/runs/37106344391) と [37106344588](https://github.com/jinxin4869/git_study_app/actions/runs/37106344588) は同じSHAで成功している。
+
+GitHub deployment `6824782584`、environment `Production`、同SHAのsuccessを2026-10-03 07:27:03 UTCに確認した。deployment固有URLは [git-study-ri9niabwb](https://git-study-ri9niabwb-jinxin1024s-projects.vercel.app)。公開画面は認証なしの [公開alias](https://git-study-app.vercel.app) で確認した。固有URLの保護された画面を操作確認済みとはしない。
+
+公開smokeを6フロー×PC/390px幅の12件へ拡張し、再試行0で成功。以前の4フローに、過去ログの追従停止/再開と、課題別の達成理由/前提/次のおすすめを追加した。テスト用ブラウザ内の保存以外に書き込みはなく、実GitHub操作/デプロイは実行していない。
+
+**`fix/post-merge-learning-reliability` の追加修正はこの公開版にまだ含まれない。** 修正後の検証はlocalhost本番ビルド/PR CIで行い、公開後は新しいdeployment/SHAを確認してsmokeを再実行する。残る実機確認と詳細は [再評価記録](post_merge_review.md)。
+
+### 保存例外の復旧と監査エラー
+
+- 読み取れないだけの既知完了表示は保持する。初回起動で読めない記録を復元できたとは扱わない。ブラウザの許可/容量を確認し「保存を再試行」する。読取が回復した後は別タブの実削除も反映する。
+- 削除途中に失敗した場合、可能な範囲で記録を戻す。削除失敗時は警告へフォーカスし小画面でも表示する。「もう一度削除」の案内が出たら許可を確認し、同じ削除確認の「削除する」を使う。戻す書込も失敗した場合は、一部削除の可能性を通知する。保存再試行は削除の再実行ではない。
+- rollbackは複数キーの強い原子性を保証しない。戻す時に既にある別タブの記録は置き換えない。削除/保存を同じIDで同時実行する場合は最後の操作が反映される。
+- npm 10の監査がquick endpoint HTTP 400で失敗した場合、その結果を0件と扱わない。[依存監査記録](dependency_security_updates.md)のnpm 11 CLIで監査を再実行する。lockfileを書き換えたり検査を無効化して復旧しない。

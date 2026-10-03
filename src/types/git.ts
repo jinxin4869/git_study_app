@@ -27,6 +27,8 @@ export interface Branch {
 }
 
 export interface GitState {
+  /** Paths whose actual merge/replay/stash conflicts still need staging. Not inferred from text. */
+  unmergedPaths?: string[];
   patchSession?: { path: string; chunks: { before: string; after: string; changed: boolean; selected?: boolean }[]; cursor: number };
   worktrees?: Record<string, { branch: string; workingDirectory: Record<string, string>; index: Record<string, FileChange> }>;
   activeWorktree?: string;

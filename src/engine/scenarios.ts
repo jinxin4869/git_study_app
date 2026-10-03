@@ -1009,6 +1009,7 @@ export const scenarios: Scenario[] = [
       branches: { 'main': 'c2', 'feature': 'c3' },
       HEAD: { type: 'branch', value: 'main' },
       index: {},
+      unmergedPaths: ['index.html'],
       workingDirectory: { 'index.html': '<<<<<<< HEAD\n<html>\n<body>\n<h1>Hello World</h1>\n</body>\n</html>\n=======\n<html>\n<body>\n<h1>Hello Git</h1>\n</body>\n</html>\n>>>>>>> feature' },
       detachedHead: false,
       stash: [],
@@ -1022,7 +1023,7 @@ export const scenarios: Scenario[] = [
     },
     hints: [
       '`git status` を実行します。',
-      'Both modified として表示されます。'
+      'Unmerged paths に index.html が表示されます。'
     ]
   },
   {
@@ -1039,6 +1040,7 @@ export const scenarios: Scenario[] = [
       branches: { 'main': 'c2', 'feature': 'c3' },
       HEAD: { type: 'branch', value: 'main' },
       index: {},
+      unmergedPaths: ['index.html'],
       workingDirectory: { 'index.html': '<html>\n<body>\n<<<<<<< HEAD\n<h1>Hello World</h1>\n=======\n<h1>Hello Git</h1>\n>>>>>>> feature\n</body>\n</html>' },
       detachedHead: false,
       stash: [],
