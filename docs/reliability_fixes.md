@@ -36,4 +36,4 @@ F01〜F04の時点でユニットテスト295件、4画面サイズのE2E 52件�
 - 同じ4画面サイズで、プレビューの編集・ブランチ切替・削除・移動・worktree切替、削除の一覧、stage後の再編集、特殊フォルダ・空白・日本語・先頭ハイフンの名前、switchのDetached HEAD条件を検証する。
 - `npm test`、`npm run lint`、`npm run typecheck`、`npm run build`、`npm run test:e2e -- --workers=2`で検証する。
 
-削除条件は[Git公式のgit-rm](https://git-scm.com/docs/git-rm)、引数は[git-status](https://git-scm.com/docs/git-status)と[git-commit](https://git-scm.com/docs/git-commit)、ブランチ切替は[git-switch](https://git-scm.com/docs/git-switch)と[git-checkout](https://git-scm.com/docs/git-checkout)も参照した。F09の依存更新、継続学習の拡張、Firefox・WebKit・実機IME・本番公開後の確認は別の対応とする。
+削除条件は[Git公式のgit-rm](https://git-scm.com/docs/git-rm)、引数は[git-status](https://git-scm.com/docs/git-status)と[git-commit](https://git-scm.com/docs/git-commit)、ブランチ切替は[git-switch](https://git-scm.com/docs/git-switch)と[git-checkout](https://git-scm.com/docs/git-checkout)も参照した。F09の依存更新は[別ブランチでの対応記録](dependency_security_updates.md)を参照する。継続学習の拡張、Firefox・WebKit・実機IME・本番公開後の確認は別の対応とする。
