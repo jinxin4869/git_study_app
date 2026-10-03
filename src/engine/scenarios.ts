@@ -1,4 +1,14 @@
 import { Scenario } from '@/types/git';
+import { practicalScenarios } from './practical-scenarios';
+import { githubScenarios } from './github-scenarios';
+import { legacySolutions } from './legacy-solutions';
+import { remoteScenarios } from './remote-scenarios';
+import { historyScenarios } from './history-scenarios';
+import { operationScenarios } from './operation-scenarios';
+import { interactiveScenarios } from './interactive-scenarios';
+import { advancedScenarios } from './advanced-scenarios';
+import { precisionScenarios } from './precision-scenarios';
+import { workflowScenarios } from './workflow-scenarios';
 
 export const scenarios: Scenario[] = [
   {
@@ -172,7 +182,7 @@ export const scenarios: Scenario[] = [
     },
     hints: [
       '`echo "Hello Git" > README.md` を実行してファイルを書き換えてください。',
-      'または `touch README.md` でも変更扱い（タイムスタンプ更新）になりますが、今回は内容を変えてみましょう。'
+      '`touch` は既存ファイルの内容を変更しません。今回は `echo` で内容を変えてください。'
     ]
   },
   {
@@ -196,11 +206,11 @@ export const scenarios: Scenario[] = [
     },
     goal: {
       type: 'command_executed', // 理想的には 'diff' か 'status' を確認
-      params: { command: 'status' } // status は modified を表示する
+      params: { command: 'diff' } // status は modified を表示する
     },
     hints: [
-      '`git status` で変更があることを確認します。',
-      '（今回は実装されていませんが、通常は `git diff` で内容の差分も見れます）'
+      '`git diff` で未ステージの変更内容を確認します。',
+      '変更前の行は -、変更後の行は + で表示されます。'
     ]
   },
   {
@@ -420,8 +430,8 @@ export const scenarios: Scenario[] = [
       mockServers: {}
     },
     goal: {
-      type: 'file_missing',
-      params: { name: 'feature.txt' }
+      type: 'command_executed',
+      params: { command: 'ls' }
     },
     hints: [
       '`ls` コマンドでファイル一覧を確認します。',
@@ -625,8 +635,8 @@ export const scenarios: Scenario[] = [
       mockServers: {}
     },
     goal: {
-      type: 'commit_count',
-      params: { count: 3 } // c1, c2, c4 (main上の新しいコミット)
+      type: 'state_matches',
+      params: { branch: 'main', tree: { 'main-update.txt': '' }, message: 'Update main' }
     },
     hints: [
       '1. `git checkout main`',
@@ -713,7 +723,8 @@ export const scenarios: Scenario[] = [
       mockServers: {}
     },
     goal: {
-      type: 'clean_working_tree'
+      type: 'state_matches',
+      params: { clean: true, stashCount: 1 }
     },
     hints: [
       '`git stash` または `git stash save "message"` を実行します。'
@@ -740,7 +751,7 @@ export const scenarios: Scenario[] = [
     },
     goal: {
       type: 'command_executed',
-      params: { command: 'stash' } // stash list
+      params: { command: 'stash list' }
     },
     hints: [
       '`git stash list` を実行します。'
@@ -823,8 +834,8 @@ export const scenarios: Scenario[] = [
       mockServers: {}
     },
     goal: {
-      type: 'commit_count',
-      params: { count: 1 }
+      type: 'state_matches',
+      params: { head: 'c1', index: { 'error.txt': 'oops' }, working: { 'error.txt': 'oops' } }
     },
     hints: [
       '`git reset --soft HEAD~1` を実行します。',
@@ -851,16 +862,13 @@ export const scenarios: Scenario[] = [
       mockServers: {}
     },
     goal: {
-      type: 'file_missing',
-      params: { name: 'error.txt' }
+      type: 'state_matches',
+      params: { message: 'Correct commit', missingCommitted: 'error.txt', working: { 'error.txt': null } }
     },
     hints: [
-      '今回はシミュレーターの制限上、`git reset` でステージング解除してからファイルを削除するか、',
-      '単に `git commit` し直す演習とします。',
-      '目標：`error.txt` が存在しない状態にしてコミットする。',
-      '1. `rm error.txt` (シミュレーターにrmがないかも？ touchで空にする？)',
-      'シミュレーターには `rm` がないので、今回は `git reset` (mixed) でステージングから降ろし、無視することにしましょう。',
-      'いや、`git reset` (mixed) を使いましょう。'
+      'まず `git restore --staged error.txt` で追加を解除します。',
+      '`rm error.txt` で不要なファイルを削除します。',
+      '`echo "v2" > file.txt` → `git add file.txt` → `git commit -m "Correct commit"` と実行します。'
     ]
   },
   {
@@ -884,8 +892,8 @@ export const scenarios: Scenario[] = [
       mockServers: {}
     },
     goal: {
-      type: 'commit_count',
-      params: { count: 1 }
+      type: 'state_matches',
+      params: { head: 'c1', clean: true, working: { 'bad.txt': null } }
     },
     hints: [
       '`git reset --hard HEAD~1` を実行します。',
@@ -1002,8 +1010,8 @@ export const scenarios: Scenario[] = [
       mockServers: {}
     },
     goal: {
-      type: 'command_executed',
-      params: { command: 'merge' } // 理想的にはコンフリクト状態が存在するか確認
+      type: 'conflict_present',
+      params: {}
     },
     hints: [
       '`git merge feature` を実行します。',
@@ -1062,7 +1070,7 @@ export const scenarios: Scenario[] = [
       mockServers: {}
     },
     goal: {
-      type: 'file_modified', // コンフリクトマーカーが消えたか確認
+      type: 'conflict_resolved',
       params: { name: 'index.html' }
     },
     hints: [
@@ -1086,6 +1094,7 @@ export const scenarios: Scenario[] = [
       index: {},
       workingDirectory: { 'index.html': '<html>\n<body>\n<h1>Hello World</h1>\n</body>\n</html>' }, // Resolved
       detachedHead: false,
+      pendingMerge: { targetId: 'c3', index: {}, workingDirectory: { 'index.html': '<html>\n<body>\n<h1>Hello World</h1>\n</body>\n</html>' } },
       stash: [],
       remotes: {},
       remoteBranches: {},
@@ -1097,7 +1106,18 @@ export const scenarios: Scenario[] = [
     },
     hints: [
       '1. `git add index.html`',
-      '2. `git commit` (メッセージは自動生成されることが多いですが、`-m "Merge feature"` としてもOK)'
+      '2. `git commit -m "Merge feature"`'
     ]
   }
 ];
+
+for (const scenario of scenarios) scenario.solution = legacySolutions[scenario.id];
+scenarios.push(...practicalScenarios);
+scenarios.push(...githubScenarios);
+scenarios.push(...remoteScenarios);
+scenarios.push(...historyScenarios);
+scenarios.push(...operationScenarios);
+scenarios.push(...interactiveScenarios);
+scenarios.push(...advancedScenarios);
+scenarios.push(...precisionScenarios);
+scenarios.push(...workflowScenarios);

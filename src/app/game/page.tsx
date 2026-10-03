@@ -19,6 +19,10 @@ interface TerminalLine {
   content: string;
 }
 
+const chapterNames = ['基本操作', 'ブランチ', 'マージ', '作業の退避', '取り消し', '過去の調査', 'コンフリクト'];
+const scenarioCategory = (scenario: Scenario) => scenario.category ?? chapterNames[Number(scenario.id.match(/^level-(\d+)/)?.[1]) - 1] ?? 'その他';
+const categories = [...new Set(scenarios.map(scenarioCategory))];
+
 /**
  * Main Application Component
  * 
@@ -30,7 +34,7 @@ export default function Game() {
   const [engine] = useState(() => new GitEngine());
   
   // 描画用のGit状態を追跡するReactステート
-  const [state, setState] = useState<GitState>(engine.getState());
+  const [state, setState] = useState<GitState>(() => engine.getState());
   
   // ターミナル出力行
   const [output, setOutput] = useState<TerminalLine[]>([
@@ -50,6 +54,14 @@ export default function Game() {
   
   // シナリオのゴールが達成されたかを示すフラグ
   const [isGoalMet, setIsGoalMet] = useState(false);
+  const [completedIds, setCompletedIds] = useState<Set<string>>(() => new Set());
+  const [category, setCategory] = useState('all');
+  const [search, setSearch] = useState('');
+  const query = search.trim().toLocaleLowerCase();
+  const visibleScenarios = scenarios.filter(scenario =>
+    (category === 'all' || scenarioCategory(scenario) === category) &&
+    (!query || [scenario.title, scenario.description, ...scenario.hints].join(' ').toLocaleLowerCase().includes(query))
+  );
   
   // ターミナルの自動スクロール用Ref
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -63,6 +75,7 @@ export default function Game() {
   useEffect(() => {
     if (isGoalMet) {
       confetti({
+        disableForReducedMotion: true,
         particleCount: 100,
         spread: 70,
         origin: { y: 0.6 }
@@ -77,6 +90,9 @@ export default function Game() {
   const loadScenario = (scenario: Scenario) => {
     setCurrentScenario(scenario);
     setIsGoalMet(false);
+    setInput('');
+    setSelectedFile(null);
+    setResolvingFile(null);
     if (scenario.initialState) {
       engine.loadState(scenario.initialState);
     } else {
@@ -120,18 +136,16 @@ export default function Game() {
       setOutput(prev => [...prev, { type: result.success ? 'success' : 'error', content: result.message }]);
     }
 
-    // コマンドが成功し、状態が変更された場合にステートを更新
-    if (result.success && result.newState) {
-      setState(result.newState);
+    // Conflicts can change files even when the command reports failure.
+    const nextState = engine.getState();
+    if (result.newState) setState(nextState);
+    if (result.success || (result.newState && currentScenario?.goal.type === 'conflict_present')) {
       
       // ゴール達成を確認
-      if (currentScenario) {
-        // チェック用にコマンド名を抽出
-        const cmdName = cmd.split(' ')[0];
-        const gitCmd = cmdName === 'git' ? cmd.split(' ')[1] : cmdName;
-        
-        if (checkGoal(result.newState, currentScenario, gitCmd)) {
+      if (currentScenario && !isGoalMet) {
+        if (checkGoal(nextState, currentScenario, cmd)) {
           setIsGoalMet(true);
+          setCompletedIds(previous => new Set(previous).add(currentScenario.id));
           setOutput(prev => [...prev, { type: 'success', content: '🎉 Goal Met! Great job!' }]);
         }
       }
@@ -178,50 +192,73 @@ export default function Game() {
     setState(engine.getState());
     setResolvingFile(null);
     setOutput(prev => [...prev, { type: 'success', content: `Resolved conflict in ${path}` }]);
+    if (currentScenario?.goal.type === 'conflict_resolved' && checkGoal(engine.getState(), currentScenario)) {
+      setIsGoalMet(true);
+      setCompletedIds(previous => new Set(previous).add(currentScenario.id));
+    }
   };
 
   return (
-    <main className="flex h-screen bg-gray-950 text-gray-100 font-sans overflow-hidden">
+    <main className="flex flex-col min-h-screen lg:flex-row lg:h-screen bg-gray-950 text-gray-100 font-sans lg:overflow-hidden">
       {/* サイドバー: シナリオ */}
-      <div className="w-64 bg-gray-900 border-r border-gray-800 flex flex-col">
+      <aside aria-label="学習する演習" className="lg:w-72 lg:shrink-0 max-h-96 lg:max-h-none bg-gray-900 border-b lg:border-b-0 lg:border-r border-gray-800 flex flex-col">
         <div className="p-4 border-b border-gray-800 flex items-center gap-2 font-bold text-lg text-blue-400">
           <BookOpen className="w-5 h-5" />
-          Levels
+          演習を選ぶ
+        </div>
+        <div className="p-3 space-y-3 border-b border-gray-800">
+          <div>
+            <label htmlFor="course-category" className="block mb-1 text-sm text-gray-300">学習コース</label>
+            <select id="course-category" value={category} onChange={event => setCategory(event.target.value)} className="w-full min-h-11 bg-gray-950 text-gray-100 border border-gray-700 rounded px-2 focus-visible:outline-2 focus-visible:outline-blue-400">
+              <option value="all">すべてのコース</option>
+              {categories.map(item => <option key={item} value={item}>{item}</option>)}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="exercise-search" className="block mb-1 text-sm text-gray-300">演習を検索</label>
+            <input id="exercise-search" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="操作やコマンド名" className="w-full min-h-11 bg-gray-950 text-gray-100 placeholder:text-gray-400 border border-gray-700 rounded px-3 focus-visible:outline-2 focus-visible:outline-blue-400" />
+          </div>
+          <p aria-live="polite" className="text-xs text-gray-300">{visibleScenarios.length} / {scenarios.length} 演習 · このセッションで {completedIds.size} 完了</p>
         </div>
         <div className="flex-1 overflow-auto p-2 space-y-2">
-          {scenarios.map(scenario => (
+          {visibleScenarios.length === 0 ? <p className="p-3 text-sm text-gray-300">該当する演習がありません。検索語やコースを変更してください。</p> : null}
+          {visibleScenarios.map(scenario => (
             <button
               key={scenario.id}
               onClick={() => loadScenario(scenario)}
+              aria-pressed={currentScenario?.id === scenario.id}
               className={clsx(
-                "w-full text-left p-3 rounded-lg text-sm transition-colors border",
+                "w-full text-left p-3 rounded-lg text-sm transition-colors border focus-visible:outline-2 focus-visible:outline-blue-400",
                 currentScenario?.id === scenario.id 
                   ? "bg-blue-900/30 border-blue-500/50 text-blue-200" 
-                  : "bg-gray-800/50 border-transparent hover:bg-gray-800 text-gray-400 hover:text-gray-200"
+                  : "bg-gray-800/50 border-transparent hover:bg-gray-800 text-gray-300 hover:text-gray-100"
               )}
             >
               <div className="font-bold mb-1">{scenario.title}</div>
+              {completedIds.has(scenario.id) ? <span className="text-xs text-green-300">完了済み</span> : null}
               <div className="text-xs opacity-70 line-clamp-2">{scenario.description}</div>
             </button>
           ))}
         </div>
-      </div>
+      </aside>
 
       {/* 中央パネル: ターミナル */}
-      <div className="w-1/3 flex flex-col border-r border-gray-800 min-w-[400px]">
+      <div className="lg:w-2/5 min-w-0 h-[36rem] lg:h-auto flex flex-col border-b lg:border-b-0 lg:border-r border-gray-800">
         <div className="p-4 border-b border-gray-800 bg-gray-900 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Terminal className="w-5 h-5 text-green-400" />
             <h1 className="font-bold text-lg">Terminal</h1>
           </div>
           <button 
-            onClick={() => window.location.reload()} 
+            onClick={() => currentScenario ? loadScenario(currentScenario) : window.location.reload()}
+            aria-label="現在の演習を最初からやり直す"
             className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors"
-            title="Reset App"
+            title="演習をやり直す"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
         </div>
+        {state.activeWorktree ? <p className="px-4 py-2 text-xs font-mono text-gray-300 break-all border-b border-gray-800">仮想作業場所: {state.activeWorktree}</p> : null}
 
         {/* ターミナル内のシナリオ情報オーバーレイ */}
         {currentScenario && (
@@ -244,7 +281,15 @@ export default function Game() {
           </div>
         )}
 
-        <div className="flex-1 overflow-auto p-4 font-mono text-sm space-y-2 bg-black/50">
+        {state.operation?.awaiting === 'todo' ? (
+          <div className="p-3 border-b border-gray-700 space-y-2">
+            <label htmlFor="rebase-todo" className="block font-bold text-sm">コミットの整理</label>
+            <p className="text-sm text-gray-300">pick / reword / edit / squash / fixup / drop を指定し、行を並べ替えられます。</p>
+            <textarea id="rebase-todo" value={state.operation.todo ?? ''} onChange={event => { engine.setRebaseTodo(event.target.value); setState(engine.getState()); }} rows={4} spellCheck={false} className="w-full bg-gray-950 text-gray-100 border border-gray-700 rounded p-2 font-mono text-sm focus-visible:outline-2 focus-visible:outline-blue-400" />
+            <p className="text-sm text-gray-300">編集後に git rebase --continue を実行してください。</p>
+          </div>
+        ) : null}
+        <div className="flex-1 min-h-0 overflow-auto p-4 font-mono text-sm space-y-2 bg-black/50">
           {output.map((line, i) => (
               <motion.div 
                 key={i} 
@@ -264,21 +309,21 @@ export default function Game() {
             <span className="text-green-400">$</span>
             <input
               type="text"
+              aria-label="演習コマンド"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="flex-1 bg-transparent outline-none font-mono text-sm"
-              placeholder="Type git command..."
-              autoFocus
+              className="flex-1 min-w-0 bg-transparent outline-none font-mono text-sm placeholder:text-gray-400"
+              placeholder={state.patchSession ? 'y / n / q を入力' : 'git status などを入力'}
             />
           </div>
         </form>
       </div>
 
       {/* 右パネル: 可視化とファイル */}
-      <div className="flex-1 flex flex-col bg-gray-900">
+      <div className="flex-1 min-w-0 h-[36rem] lg:h-auto flex flex-col bg-gray-900">
         <div className="h-2/3 flex flex-col border-b border-gray-800">
-          <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+          <div className="p-4 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-bold text-lg flex items-center gap-2">
               <Play className="w-5 h-5 text-purple-400" />
               Visualizer
