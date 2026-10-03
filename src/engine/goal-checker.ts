@@ -1,10 +1,10 @@
-import { GitState, Scenario } from '@/types/git';
+import { CommandResult, GitState, Scenario } from '@/types/git';
 import { headTree, indexTree, cleanTrackedFiles, normalizeCommand } from './git-state';
 
 /**
  * Checks if the current state meets the scenario goal.
  */
-export const checkGoal = (currentState: GitState, scenario: Scenario, lastCommand?: string): boolean => {
+const matchesGoal = (currentState: GitState, scenario: Scenario, lastCommand?: string): boolean => {
   const goal = scenario.goal;
   if (goal.type === 'github_state') {
     const expected = goal.params ?? {};
@@ -186,3 +186,68 @@ export const checkGoal = (currentState: GitState, scenario: Scenario, lastComman
 
   return false;
 };
+
+export interface GoalCondition { id: string; label: string; met: boolean }
+export interface GoalAssessment { met: boolean; conditions: GoalCondition[] }
+const describeValue = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value);
+const fieldLabels: Record<string, string> = {
+  command: '指定した操作を成功させる', operation: '進行中の履歴操作', bisectActive: 'bisectの実行状態', bisectFound: '原因コミット',
+  sparseCheckout: 'sparse-checkoutの対象', lfsInstalled: 'LFSの初期化', lfsPatterns: 'LFSの対象パターン',
+  worktrees: 'worktreeのブランチ（nullは削除）', worktreeWorking: 'worktreeの作業ファイル', submodules: 'submoduleの状態',
+  head: 'HEADのコミット', branch: '現在のブランチ', message: '最新コミットのメッセージ', parents: '最新コミットの親と順序',
+  historyMessages: 'HEADから第一親へ続くメッセージと順序', clean: 'HEAD・index・追跡ファイルに未保存の差がない（未追跡は対象外）',
+  stashCount: 'stashの件数', branches: 'ローカルブランチの参照', remoteBranches: 'リモート追跡参照', remotes: '接続先URL',
+  upstreams: 'upstreamの設定', config: 'Git設定', tags: 'タグの参照', serverBranches: '模擬サーバーのブランチ',
+  remoteTree: '模擬サーバーのファイル内容', tagMessages: '注釈付きタグのメッセージ', tagBranches: 'タグとブランチの一致',
+  serverTagBranches: '公開済みタグとローカルブランチの一致', branchTrees: '各ブランチのコミット内容', missingCommitted: 'コミットから除くファイル',
+  tree: 'HEADのファイル内容（nullは不在）', working: '作業ツリーの内容（nullは不在）', index: 'indexの内容（nullは不在）',
+  status: 'PRの状態', review: '最新の公開コミットに対するレビュー', checks: '最新の公開コミットに対するCI', title: 'PRのタイトル'
+};
+
+/** The displayed requirements and pass/fail use the same existing state predicates. */
+export const assessGoal = (state: GitState, scenario: Scenario, lastCommand?: string, result?: CommandResult): GoalAssessment => {
+  const goal = scenario.goal;
+  const params = goal.params ?? {};
+  const conditions: GoalCondition[] = [];
+  const add = (id: string, label: string, partial = goal) => conditions.push({ id, label, met: matchesGoal(state, { ...scenario, goal: partial }, lastCommand) });
+  if (goal.type === 'state_matches' || goal.type === 'github_state') {
+    if (goal.type === 'github_state') {
+      add('pr', `模擬PR #${params.number ?? 1} が存在する`, { type: goal.type, params: { number: params.number } });
+    }
+    for (const [key, value] of Object.entries(params)) {
+      if (key === 'number' || key === 'remoteBranch') continue; // Context for other predicates, not a requirement on its own.
+      const label = key === 'operation' && value === null ? '進行中の履歴操作を終了する' :
+        key === 'clean' ? fieldLabels.clean : `${fieldLabels[key] ?? key}: ${describeValue(value)}`;
+      add(key, label, { type: goal.type, params: { [key]: value, number: params.number, remoteBranch: params.remoteBranch } });
+    }
+  } else {
+    const name = describeValue(params.name ?? '');
+    const labels: Record<Scenario['goal']['type'], string> = {
+      repo_initialized: 'リポジトリの初期化を成功させる', file_exists: `作業ツリーに ${name} が存在する`,
+      command_executed: `確認操作を成功させる: ${params.command ?? ''}（対応する引数を追加可能）`,
+      file_staged: `${name} のindexとHEADに差がある`, file_modified: `${name} が存在し、HEADと内容が異なる`,
+      file_committed: `HEADのコミットに ${name} が存在する`, file_missing: `作業ツリーに ${name} が存在しない`,
+      commit_count: `HEADから第一親をたどるコミットが ${params.count ?? 0} 件以上ある`,
+      branch_exists: params.check_detached ? 'Detached HEADになっている' : `ブランチ ${name} が存在する${params.checkedOut ? '、かつそのブランチにいる' : ''}`,
+      merge_complete: params.mergedCommit ? `ブランチ ${params.branch} が ${params.mergedCommit} を指す` : 'HEADが複数の親を持つマージコミットである',
+      clean_working_tree: fieldLabels.clean, stash_count: `stashが ${params.count ?? 0} 件以上ある`,
+      conflict_present: '作業ツリーに競合が発生している',
+      conflict_resolved: `${name} が許容された解決内容と一致し、すべてのファイルに競合マーカーがない`,
+      state_matches: '', github_state: ''
+    };
+    add(goal.type, labels[goal.type]);
+    if (goal.type === 'conflict_resolved') {
+      const content = state.workingDirectory[params.name as string];
+      conditions[0].label = `${name} に必要な解決内容を保つ（前後の空白を除いて、Current / Incoming / Bothの許容結果のいずれかと一致し、すべての競合マーカーを除く）`;
+      if (content !== undefined && Array.isArray(params.acceptedContents) && !params.acceptedContents.some(expected => typeof expected === 'string' && content.trim() === expected.trim())) conditions[0].label += '。現在の内容は許容結果と異なります。ファイル全体の構造・欠けた行を確認してください';
+    }
+  }
+  if (conditions.length === 0) add('state', '指定された状態を満たす');
+  if (result && !result.success && !(goal.type === 'conflict_present' && result.newState && matchesGoal(state, scenario, lastCommand))) {
+    conditions.push({ id: 'execution', label: '最後の操作を成功させる（失敗した操作では合格しません）', met: false });
+  }
+  return { met: conditions.every(condition => condition.met), conditions };
+};
+
+export const checkGoal = (state: GitState, scenario: Scenario, lastCommand?: string, result?: CommandResult): boolean =>
+  assessGoal(state, scenario, lastCommand, result).met;
