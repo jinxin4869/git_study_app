@@ -3,10 +3,10 @@ import { GitEngine } from './git-simulator';
 import { scenarios } from './scenarios';
 import { assessGoal } from './goal-checker';
 import { fileStates } from './file-states';
-import { cleanTrackedFiles, indexTree } from './git-state';
+import { cleanTrackedFiles, indexTree, untrackedFiles } from './git-state';
 import { operationGuidance } from '@/learning/operation-guidance';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -103,6 +103,35 @@ describe('post-merge reliability regressions', () => {
     expect(engine.getState().stash).toHaveLength(1);
     expect(operationGuidance(engine.getState())).toBeNull();
   });
+  it.each([
+    ['level-7-1', 'level-7-4', 'git merge feature', 'index.html', 'git commit -m "Keep markers"'],
+    ['stash-conflict', 'stash-conflict', 'git stash pop', 'app.ts', 'git status'],
+    ['operation-rebase-continue', 'operation-rebase-continue', 'git rebase main', 'app.ts', 'git rebase --continue'],
+  ])('staging unresolved marker contents clears index conflicts without passing the content requirements: %s', (initial, goal, start, path, finish) => {
+    const engine = new GitEngine(lesson(initial).initialState);
+    expect(engine.execute(start).success).toBe(false);
+    expect(engine.execute(`git add ${path}`).success).toBe(true);
+    expect(engine.getState().unmergedPaths).toBeUndefined();
+    expect(engine.execute('git status').message).not.toContain('Unmerged paths:');
+    const result = engine.execute(finish);
+    expect(result.success).toBe(true);
+    const assessment = assessGoal(engine.getState(), lesson(goal), finish, result);
+    expect(assessment.met).toBe(false);
+    expect(assessment.conditions.some(condition => !condition.met && condition.id !== 'execution')).toBe(true);
+  });
+  it('does not treat clearing conflict metadata with mixed reset as staging the stash resolution', () => {
+    const scenario = lesson('stash-conflict');
+    const engine = new GitEngine(scenario.initialState);
+    engine.execute('git stash pop'); engine.execute('echo "Combined" > app.ts');
+    const reset = engine.execute('git reset --mixed HEAD');
+    expect(reset.success).toBe(true);
+    expect(engine.getState().unmergedPaths).toBeUndefined();
+    const assessment = assessGoal(engine.getState(), scenario, 'git reset --mixed HEAD', reset);
+    expect(assessment.met).toBe(false);
+    expect(assessment.conditions.find(condition => condition.id === 'index')?.met).toBe(false);
+    const staged = engine.execute('git add app.ts');
+    expect(assessGoal(engine.getState(), scenario, 'git add app.ts', staged).met).toBe(true);
+  });
   it('clears real conflicts on merge abort, replay skip, and hard reset, and preserves unrelated notes', () => {
     for (const [id, start, finish] of [
       ['level-7-1', 'git merge feature', 'git merge --abort'],
@@ -155,6 +184,31 @@ describe('post-merge reliability regressions', () => {
 });
 
 describe('real Git checks for conflict identity and destructive input', () => {
+  it('treats a deleted-side conflict as tracked and removes it on hard reset without deleting unrelated notes', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'git-learning-deleted-conflict-'));
+    const git = (args: string[]) => spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
+    try {
+      git(['init', '-b', 'main']); git(['config', 'user.name', 'Learning test']); git(['config', 'user.email', 'test@example.invalid']);
+      writeFileSync(join(directory, 'index.html'), 'base'); git(['add', '.']); git(['commit', '-m', 'Base']);
+      git(['checkout', '-b', 'feature']); writeFileSync(join(directory, 'index.html'), 'feature'); git(['commit', '-am', 'Feature']);
+      git(['checkout', 'main']); git(['rm', 'index.html']); git(['commit', '-m', 'Remove']);
+      const initial = new GitEngine(lesson('level-7-1').initialState).getState();
+      initial.commits.c2.tree = {}; initial.workingDirectory = {};
+      const engine = new GitEngine(initial);
+      expect(git(['merge', 'feature']).status).not.toBe(0); expect(engine.execute('git merge feature').success).toBe(false);
+      writeFileSync(join(directory, 'notes.txt'), 'keep'); engine.touch('notes.txt', 'keep');
+      expect(git(['ls-files', '-u']).stdout).toContain('index.html');
+      const untracked = untrackedFiles(engine.getState());
+      const conflict = fileStates(engine.getState()).find(file => file.path === 'index.html');
+      expect(git(['reset', '--hard', 'HEAD']).status).toBe(0);
+      expect(engine.execute('git reset --hard HEAD').success).toBe(true);
+      expect(untracked).toEqual({ 'notes.txt': 'keep' });
+      expect(conflict).toMatchObject({ conflict: true, untracked: false });
+      expect(existsSync(join(directory, 'index.html'))).toBe(false);
+      expect(engine.getState().workingDirectory).toEqual({ 'notes.txt': 'keep' });
+      expect(readFileSync(join(directory, 'notes.txt'), 'utf8')).toBe('keep');
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
   it('separates ordinary marker text from actual unmerged paths, which remain after editing and disappear after add', () => {
     const directory = mkdtempSync(join(tmpdir(), 'git-learning-unmerged-'));
     const git = (args: string[]) => spawnSync('git', args, { cwd: directory, encoding: 'utf8' });
@@ -171,6 +225,15 @@ describe('real Git checks for conflict identity and destructive input', () => {
       expect(engine.execute('git merge feature missing-reference').success).toBe(false);
       expect(engine.getState()).toEqual(before);
       expect(git(['status', '--porcelain']).stdout).toBe(realBefore);
+      expect(git(['merge', 'feature']).status).not.toBe(0); expect(engine.execute('git merge feature').success).toBe(false);
+      // Git add resolves index stages even if the user stages the markers unchanged.
+      git(['add', 'index.html']); engine.execute('git add index.html');
+      expect(git(['ls-files', '-u']).stdout).toBe(''); expect(engine.getState().unmergedPaths).toBeUndefined();
+      expect(git(['commit', '-m', 'Keep markers']).status).toBe(0);
+      const markerCommit = engine.execute('git commit -m "Keep markers"');
+      expect(markerCommit.success).toBe(true);
+      expect(assessGoal(engine.getState(), lesson('level-7-4'), 'git commit -m "Keep markers"', markerCommit).met).toBe(false);
+      git(['reset', '--hard', 'HEAD~1']); engine.execute('git reset --hard HEAD~1');
       expect(git(['merge', 'feature']).status).not.toBe(0); expect(engine.execute('git merge feature').success).toBe(false);
       write('index.html', 'Resolved'); engine.touch('index.html', 'Resolved');
       expect(git(['ls-files', '-u']).stdout).toContain('index.html');

@@ -31,11 +31,11 @@ fetch後の `origin/main` と作業開始時のHEADは `cd3272dbff8f8be486b2acf4
 
 ## 競合と採点の契約
 
-`GitState.unmergedPaths`に実際の未解消パスを持つ。merge、stash、rebase/cherry-pick/revertで競合した時に設定し、内容の編集だけでは消さない。git addでマーカーを除いた解消内容（または削除）をstageすると該当パスを除く。未解消中はcommit/続行/別操作開始を拒否する。abort/skip/resetで状態を適切に戻し、無関係な未追跡ファイル保持の回帰を維持する。
+`GitState.unmergedPaths`に実際の未解消パスを持つ。merge、stash、rebase/cherry-pick/revertで競合した時に設定し、内容の編集だけでは消さない。git addで現在内容（または削除）をstageすると該当パスを除く。実Git同様、マーカーを残したままstageしてもindexの未解消パスは解除する。stageだけで内容が正しいとは判断せず、課題の内容条件で誤解消を未達にする。未解消中はcommit/続行/別操作開始を拒否する。abort/skip/resetで状態を適切に戻し、無関係な未追跡ファイル保持の回帰を維持する。
 
 fileStates、status、競合解決セッション、操作案内と採点でこの状態を共有する。通常のマーカー例は競合表示/三択にしない。未解消で内容を編集済みなら通常プレビューで内容を確認でき、stageが必要だと案内する。statusは `Unmerged paths` と `unmerged: <パス>` を表示する。実Gitのboth modified/deleted by us等の細かい分類は再現していない。
 
-`conflict_present`は実際の未解消パスを要求する。`state_matches.unmergedPaths: []`は解消してstage済みを条件にし、同じassessmentのラベルを未達理由に使う。stash課題は説明・ヒント・goal・solution・注意・[教材レビュー](lesson_review.md)を同時更新した。保存済みの過去の完了記録は消さず、新しい挑戦には現在の採点を使う。
+`conflict_present`は実際の未解消パスを要求する。`state_matches.unmergedPaths: []`はindexに未解消パスがないことを条件にし、同じassessmentのラベルを未達理由に使う。stash課題は説明・ヒント・goal・solution・注意・[教材レビュー](lesson_review.md)を同時更新した。保存済みの過去の完了記録は消さず、新しい挑戦には現在の採点を使う。
 
 merge/replayは既存の続行・中断候補を維持する。stashにはgit statusと内容解消→stage、演習リセットの案内を表示する。存在しない `git stash --abort` や未対応 `git merge --continue` は案内しない。[Git公式のstash](https://git-scm.com/docs/git-stash)、[merge](https://git-scm.com/docs/git-merge)、[reset](https://git-scm.com/docs/git-reset)と対応範囲を比較した。
 
@@ -56,7 +56,7 @@ version 1、selection/complete/hintのキーとJSON形式を維持する。新�
 | 検査 | 結果 / 範囲 |
 | --- | --- |
 | lint / typecheck / 本番build | 成功。既存Hooks/a11y検査を維持。/game First Load JS 216kB |
-| unit | 616件 / 25ファイル成功。追加のエンジン45件と保存6件、既存139演習の解答/実Git比較/特殊名/状態保持を維持 |
+| unit | 621件 / 25ファイル成功。追加のエンジン50件と保存6件、既存139演習の解答/実Git比較/特殊名/状態保持を維持 |
 | localhost E2E | 最終276件成功（46フロー×Chromium4サイズ/Firefox/WebKit）、workers2・retries0。新しい保存読取/削除障害/偽競合/stash stageの4フローを含む |
 | 自動アクセシビリティ / 画面確認 | 既存axe5状態×6構成で指摘0、キーボード/合成IMEを維持。PC/390px幅の保存失敗・stash案内を一括確認し、小画面の削除警告を表示する修正後に再確認 |
 | 公開smoke | PR #6マージ後の公開aliasで12件成功、PC/390px幅、再試行0。今回修正の公開検証ではない |
@@ -75,7 +75,9 @@ npm run test:e2e:production
 
 ローカルWebKitはPR #5/#6と同じ公式WebKit 2359＋一時OSライブラリ/ランチャー。Chromium4サイズとFirefoxは標準設定。ローカルの一時Playwright設定はコミットしない。CIは `npx playwright install --with-deps chromium firefox webkit`。テストskip/検査無効化はなし。
 
-初回の修正後E2Eは270成功/6失敗。偽マーカーのクリックでプレビューが開かなかった。画面側だけが旧マーカー判別を残していたため、engine.openConflictResolutionが返す実セッションで振り分けるよう修正し、全構成を再実行した。テストの期待を弱めず、修正後に276件成功。その後のPC/390px幅の画面確認で、削除失敗の警告が小画面サイドバーのスクロール外に隠れる問題を見つけた。明示的な削除失敗では警告へフォーカスするよう修正し、警告がサイドバー表示範囲内にあることもE2Eで検証した。通常の端末出力やstorage通知のたびにフォーカスを移動する変更ではない。この最終変更後も276件成功（2.9分、再試行0）。390px幅で警告・削除確認・再試行を読めることを画像で再確認した。
+初回の修正後E2Eは270成功/6失敗。偽マーカーのクリックでプレビューが開かなかった。画面側だけが旧マーカー判別を残していたため、engine.openConflictResolutionが返す実セッションで振り分けるよう修正し、全構成を再実行した。テストの期待を弱めず、修正後に276件成功。その後のPC/390px幅の画面確認で、削除失敗の警告が小画面サイドバーのスクロール外に隠れる問題を見つけた。明示的な削除失敗では警告へフォーカスするよう修正し、警告がサイドバー表示範囲内にあることもE2Eで検証した。通常の端末出力やstorage通知のたびにフォーカスを移動する変更ではない。この警告表示の変更後も276件成功（再試行0）。390px幅で警告・削除確認・再試行を読めることを画像で再確認した。
+
+完了監査で、マーカーをそのままstageした場合に模擬だけが未解消パスを残す差を見つけた。追加した3つの否定例は修正前に失敗した。Git add後の未解消解除を実Gitへそろえ、マーカー入りcommit/続行が実行できてもmerge/rebase/stashの内容条件が不合格になることを確認した。実Git比較にも、マーカーをstage→commitできることと、その後reset→再競合→正しく解消する経路を追加した。stashのE2Eはマーカーをstageしただけで未達である経路も検証した。未解消パスが空でもmixed reset等では解消内容をstageした保証にならないため、stashのgoalはindexのCombined内容も要求する。resetのみで合格する不足を修正前の否定例で再現し、内容/実効index/未解消パスの三条件を説明と採点で共有した。削除側の競合ではstage 0相当の内容がないため、未解消パスが未追跡扱いになりhard reset後も残る不足も再現した。実Git比較で、未解消パスを未追跡から除外してresetで削除し、無関係なnotes.txtは残すことを追加検証した。すべての追加修正後、unit621件、lint/typecheck/build、localhost E2E276件（再試行0）が成功した。
 
 ## 未検証と後回しの具体的な範囲
 

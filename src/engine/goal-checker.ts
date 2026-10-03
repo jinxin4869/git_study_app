@@ -220,7 +220,7 @@ export interface GoalCondition { id: string; label: string; met: boolean }
 export interface GoalAssessment { met: boolean; conditions: GoalCondition[] }
 const describeValue = (value: unknown) => typeof value === 'string' ? value : JSON.stringify(value);
 const fieldLabels: Record<string, string> = {
-  unmergedPaths: '未解消の競合パス（空配列は解消してstage済み）',
+  unmergedPaths: 'indexに残る未解消の競合パス（内容は別の条件で確認）',
   command: '指定した操作を成功させる', operation: '進行中の履歴操作', bisectActive: 'bisectの実行状態', bisectFound: '原因コミット',
   sparseCheckout: 'sparse-checkoutの対象', lfsInstalled: 'LFSの初期化', lfsPatterns: 'LFSの対象パターン',
   worktrees: 'worktreeのブランチ（nullは削除）', worktreeWorking: 'worktreeの作業ファイル', submodules: 'submoduleの状態',

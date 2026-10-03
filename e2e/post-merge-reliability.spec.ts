@@ -106,6 +106,13 @@ test('stash conflict guidance remains until the edited resolution is staged and 
   await expect(guidance).toContainText('未解消の競合');
   await expect(guidance).toContainText('元の保管は残ります');
   await expect(guidance.getByRole('button', { name: 'git stash --abort' })).toHaveCount(0);
+  await run(page, 'git add app.ts');
+  await expect(guidance).toHaveCount(0);
+  await expect(page.getByRole('list', { name: '達成条件' })).toContainText('未達: 作業ツリーの内容');
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('git-learning:v1:complete:stash-conflict'))).toBeNull();
+  await page.getByRole('button', { name: '現在の演習を最初からやり直す' }).click();
+  await run(page, 'git stash pop');
   await run(page, 'echo "Combined" > app.ts');
   await expect(guidance).toBeVisible();
   await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
@@ -115,6 +122,10 @@ test('stash conflict guidance remains until the edited resolution is staged and 
   await page.getByRole('textbox', { name: '演習コマンド' }).press('Enter');
   await expect(page.getByRole('region', { name: '端末出力' })).toContainText('Unmerged paths:');
   if (['desktop', 'mobile'].includes(testInfo.project.name)) await page.screenshot({ path: testInfo.outputPath('stash-unmerged.png'), fullPage: true });
+  await run(page, 'git reset --mixed HEAD');
+  await expect(guidance).toHaveCount(0);
+  await expect(page.getByRole('list', { name: '達成条件' })).toContainText('未達: indexの内容');
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
   await run(page, 'git add app.ts');
   await expect(guidance).toHaveCount(0);
   await expect(page.getByRole('list', { name: '達成条件' })).not.toContainText('未達:');

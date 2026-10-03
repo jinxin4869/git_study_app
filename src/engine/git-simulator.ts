@@ -8,7 +8,7 @@ import { isIgnored } from './gitignore';
 import { diffLines } from 'diff';
 import { fileStates } from './file-states';
 import { tokenizeCommand, validateCommandOptions } from './command-input';
-import { isUnmerged, hasUnmergedPaths, hasConflictMarkers, clearUnmergedPaths } from './conflicts';
+import { isUnmerged, hasUnmergedPaths, clearUnmergedPaths } from './conflicts';
 
 export interface ConflictResolutionSession {
   path: string;
@@ -305,7 +305,7 @@ export class GitEngine {
     } else if (mode === 'hard') {
       // Hard reset: HEAD移動、インデックスとWDもHEADに合わせてリセット。
       this.state.index = dictionary();
-      const untracked = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => originalIndex[path] === undefined && targetCommit.tree[path] === undefined));
+      const untracked = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => originalIndex[path] === undefined && targetCommit.tree[path] === undefined && !isUnmerged(this.state, path)));
       this.state.workingDirectory = { ...targetCommit.tree, ...untracked };
     }
     if (mode !== 'soft') {
@@ -716,7 +716,9 @@ export class GitEngine {
         ? { path, status: 'deleted' }
         : { path, status: content === head[path] ? 'unmodified' : 'staged', content };
     }
-    clearUnmergedPaths(this.state, new Set(visiblePaths.filter(path => !hasConflictMarkers(this.state.workingDirectory[path] ?? ''))));
+    // Like Git, staging records the user's choice, even when marker text remains.
+    // Lesson content requirements decide whether that choice is a correct resolution.
+    clearUnmergedPaths(this.state, new Set(visiblePaths));
     return { success: true, message: '', newState: this.getState() };
   }
 

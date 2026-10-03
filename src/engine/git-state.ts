@@ -1,4 +1,5 @@
 import { GitState } from '@/types/git';
+import { isUnmerged } from './conflicts';
 
 // Paths and reference names may equal Object.prototype keys.
 export const dictionary = <T>(entries: Record<string, T> = {}): Record<string, T> =>
@@ -39,7 +40,7 @@ export const sameTree = (left: Record<string, string>, right: Record<string, str
 
 export const untrackedFiles = (state: GitState): Record<string, string> => {
   const index = indexTree(state);
-  return dictionary(Object.fromEntries(Object.entries(state.workingDirectory).filter(([path]) => index[path] === undefined)));
+  return dictionary(Object.fromEntries(Object.entries(state.workingDirectory).filter(([path]) => index[path] === undefined && !isUnmerged(state, path))));
 };
 
 export const cleanTrackedFiles = (state: GitState) => {

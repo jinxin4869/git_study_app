@@ -24,7 +24,7 @@ export function fileStates(state: GitState): FileState[] {
   const paths = new Set([...Object.keys(head), ...Object.keys(index), ...Object.keys(working), ...state.unmergedPaths ?? []]);
   return [...paths].filter(path => inSparseScope(state, path)).map(path => {
     const content = working[path];
-    const untracked = index[path] === undefined && content !== undefined;
+    const untracked = index[path] === undefined && content !== undefined && !isUnmerged(state, path);
     const ignored = untracked && isIgnored(state, path);
     return {
       path, content,
