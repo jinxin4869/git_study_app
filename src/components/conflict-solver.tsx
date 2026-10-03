@@ -21,7 +21,7 @@ interface ConflictSection {
  * 
  * Provides a UI for resolving merge conflicts.
  * It parses file content containing Git conflict markers (<<<<<<<, =======, >>>>>>>)
- * and allows the user to choose between Current Change, Incoming Change, or Both.
+ * and allows the user to choose between Current Change, 取り込み側の変更, or Both.
  */
 export function ConflictSolver({ filePath, content, onResolve, onCancel }: ConflictSolverProps) {
   const [decisions, setDecisions] = useState<Record<string, 'current' | 'incoming' | 'both' | null>>({});
@@ -109,11 +109,11 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
     <div className="bg-gray-900 p-4 rounded-lg border border-gray-700 font-mono text-sm">
       <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
         <h3 className="min-w-0 break-all text-lg font-bold text-yellow-400">
-            {hasConflicts ? `Conflict Resolution: ${filePath}` : `File Preview: ${filePath}`}
+            {hasConflicts ? `競合の解消: ${filePath}` : `ファイルの内容: ${filePath}`}
         </h3>
         <div className="flex flex-wrap gap-2">
           <button onClick={onCancel} className="min-h-11 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white">
-            {hasConflicts ? 'Cancel' : 'Close'}
+            {hasConflicts ? 'キャンセル' : '閉じる'}
           </button>
           {hasConflicts && (
             <button 
@@ -121,7 +121,7 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
                 disabled={!allResolved}
                 className={`min-h-11 px-3 py-2 rounded flex items-center gap-2 ${allResolved ? 'bg-green-800 hover:bg-green-700 text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
             >
-                <Check size={16} /> Complete Merge
+                <Check size={16} /> 解消内容を適用
             </button>
           )}
         </div>
@@ -137,34 +137,37 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
                 <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-700">
                   {/* Current Changes Panel */}
                   <div className={`p-2 ${decisions[section.id] === 'current' || decisions[section.id] === 'both' ? 'bg-green-900/30' : 'bg-gray-800/50'}`}>
-                    <div className="text-xs text-green-400 mb-1 font-bold">Current Change (HEAD)</div>
+                    <div className="text-xs text-green-400 mb-1 font-bold">現在側の変更 (HEAD)</div>
                     <pre className="whitespace-pre-wrap break-words text-gray-300">{section.current}</pre>
                     <button 
                       onClick={() => handleDecision(section.id, 'current')}
+                      aria-pressed={decisions[section.id] === 'current'}
                       className={`mt-2 w-full min-h-11 py-2 text-xs rounded border ${decisions[section.id] === 'current' ? 'bg-green-800 border-green-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
                     >
-                      Accept Current
+                      現在側を採用
                     </button>
                   </div>
 
-                  {/* Incoming Changes Panel */}
+                  {/* 取り込み側の変更s Panel */}
                   <div className={`p-2 ${decisions[section.id] === 'incoming' || decisions[section.id] === 'both' ? 'bg-blue-900/30' : 'bg-gray-800/50'}`}>
-                    <div className="text-xs text-blue-400 mb-1 font-bold">Incoming Change</div>
+                    <div className="text-xs text-blue-400 mb-1 font-bold">取り込み側の変更</div>
                     <pre className="whitespace-pre-wrap break-words text-gray-300">{section.incoming}</pre>
                     <button 
                       onClick={() => handleDecision(section.id, 'incoming')}
+                      aria-pressed={decisions[section.id] === 'incoming'}
                       className={`mt-2 w-full min-h-11 py-2 text-xs rounded border ${decisions[section.id] === 'incoming' ? 'bg-blue-800 border-blue-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
                     >
-                      Accept Incoming
+                      取り込み側を採用
                     </button>
                   </div>
                 </div>
                 <div className="p-2 bg-gray-800 border-t border-gray-700 text-center">
                    <button 
                       onClick={() => handleDecision(section.id, 'both')}
+                      aria-pressed={decisions[section.id] === 'both'}
                       className={`w-full min-h-11 py-2 text-xs rounded border ${decisions[section.id] === 'both' ? 'bg-purple-800 border-purple-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
                     >
-                      Accept Both
+                      両方を採用
                     </button>
                 </div>
               </div>

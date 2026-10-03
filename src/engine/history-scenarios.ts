@@ -26,15 +26,15 @@ export const historyScenarios: Scenario[] = [
   lesson('history-rename-branch', '作業ブランチの名前変更', 'featureの名前をfeature/loginへ変更してください。コミット位置はc2のまま維持します。', {},
     { type: 'state_matches', params: { branches: { feature: null, 'feature/login': 'c2' } } }, ['git branch -m feature feature/login'], 'ブランチ'),
   lesson('history-delete-branch', '統合済みブランチを削除', 'featureはmainに統合済みです。mainにいる状態でfeatureを削除してください。', { branches: { main: 'c2', feature: 'c2' }, workingDirectory: c2.tree },
-    { type: 'state_matches', params: { branches: { feature: null, main: 'c2' } } }, ['git branch -d feature'], 'ブランチ'),
+    { type: 'state_matches', params: { branch: 'main', branches: { feature: null, main: 'c2' } } }, ['git branch -d feature'], 'ブランチ'),
   lesson('history-detached-rescue', 'Detached HEADでの作業を保存', '過去のc2にいるDetached HEAD状態です。rescueブランチを作成して移動し、履歴を保存してください。', { HEAD: { type: 'commit', value: 'c2' }, detachedHead: true, workingDirectory: c2.tree },
     { type: 'state_matches', params: { branch: 'rescue', branches: { rescue: 'c2' }, working: { 'app.ts': 'version 2' } } }, ['git switch -c rescue'], 'ブランチ'),
   lesson('history-no-ff', '明示的なマージコミット', 'mainはfeatureの祖先です。--no-ffで統合したことを示す二親のコミットを作成してください。', { branches: { main: 'c1', feature: 'c2' }, workingDirectory: c1.tree },
-    { type: 'state_matches', params: { parents: ['c1', 'c2'], tree: c2.tree, clean: true } }, ['git merge --no-ff feature'], 'マージ'),
+    { type: 'state_matches', params: { branch: 'main', parents: ['c1', 'c2'], tree: c2.tree, clean: true } }, ['git merge --no-ff feature'], 'マージ'),
   lesson('history-rebase', '機能ブランチを最新mainへ', 'featureを最新mainへrebaseしてください。アプリ変更と文書変更の両方を残します。', { HEAD: { type: 'branch', value: 'feature' }, workingDirectory: c2.tree },
     { type: 'state_matches', params: { branch: 'feature', parents: ['c3'], tree: { 'app.ts': 'version 2', 'README.md': 'Documentation' } } }, ['git rebase main']),
   lesson('history-pick', '必要な修正だけを移植', 'mainへFeatureコミットc2だけを移植してください。main側の文書変更を保持します。', {},
-    { type: 'state_matches', params: { parents: ['c3'], message: 'Feature', tree: { 'app.ts': 'version 2', 'README.md': 'Documentation' } } }, ['git cherry-pick c2']),
+    { type: 'state_matches', params: { branch: 'main', parents: ['c3'], message: 'Feature', tree: { 'app.ts': 'version 2', 'README.md': 'Documentation' } } }, ['git cherry-pick c2']),
   lesson('history-revert', '共有済みの変更を取り消す', 'Featureコミットc2をrevertしてください。後から追加した文書は残し、履歴を削除しません。', {
     commits: { c1, c2, c3, c4: { ...c3, id: 'c4', parents: ['c2'], tree: { 'app.ts': 'version 2', 'README.md': 'Documentation' } } },
     branches: { main: 'c4', feature: 'c2' }, workingDirectory: { 'app.ts': 'version 2', 'README.md': 'Documentation' }

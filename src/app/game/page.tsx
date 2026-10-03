@@ -6,24 +6,21 @@ import { GitGraph } from '@/components/git-graph';
 import { ConflictSolver } from '@/components/conflict-solver';
 import { FileTree } from '@/components/file-tree';
 import { FilePreview } from '@/components/file-preview';
+import { TerminalOutput, type TerminalLine } from '@/components/terminal-output';
 import { GitState, Scenario, CommandResult } from '@/types/git';
 import { scenarios } from '@/engine/scenarios';
 import { assessGoal } from '@/engine/goal-checker';
 import { ProgressStore, PROGRESS_PREFIX } from '@/learning/progress';
 import { lessonHints } from '@/learning/hints';
 import { operationGuidance } from '@/learning/operation-guidance';
+import { lessonNotes } from '@/learning/lesson-notes';
+import { scenarioCategory, preparationFor, recommendedNext, learningPath } from '@/learning/learning-path';
+import type { GoalAssessment } from '@/engine/goal-checker';
 import { Terminal, Play, RotateCcw, BookOpen, CheckCircle, HelpCircle } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import clsx from 'clsx';
 import confetti from 'canvas-confetti';
 
-interface TerminalLine {
-  type: 'command' | 'success' | 'error' | 'info';
-  content: string;
-}
-
-const chapterNames = ['基本操作', 'ブランチ', 'マージ', '作業の退避', '取り消し', '過去の調査', 'コンフリクト'];
-const scenarioCategory = (scenario: Scenario) => scenario.category ?? chapterNames[Number(scenario.id.match(/^level-(\d+)/)?.[1]) - 1] ?? 'その他';
 const categories = [...new Set(scenarios.map(scenarioCategory))];
 
 /**
@@ -39,6 +36,8 @@ export default function Game() {
 }
 
 function LearningSession() {
+  const reducedMotion = useReducedMotion();
+  const [terminalSession, setTerminalSession] = useState(0);
   const [saved] = useState(() => {
     try {
       const store = new ProgressStore(window.localStorage, new Set(scenarios.map(item => item.id)), new Set(categories));
@@ -56,11 +55,11 @@ function LearningSession() {
   
   // ターミナル出力行
   const [output, setOutput] = useState<TerminalLine[]>(initialScenario ? [
-    { type: 'info', content: `Loaded: ${initialScenario.title}` },
+    { type: 'info', content: `演習を開始: ${initialScenario.title}` },
     { type: 'info', content: initialScenario.description }
   ] : [
-    { type: 'info', content: 'Welcome to Git Learning App!' },
-    { type: 'info', content: 'Select a level to start.' }
+    { type: 'info', content: '自由練習です。ブラウザ内の模擬Gitを試せます。' },
+    { type: 'info', content: '演習を選ぶか「基本操作から始める」で学習できます。' }
   ]);
   
   // 現在のコマンド入力
@@ -75,6 +74,7 @@ function LearningSession() {
   
   // シナリオのゴールが達成されたかを示すフラグ
   const [isGoalMet, setIsGoalMet] = useState(false);
+  const [completionReasons, setCompletionReasons] = useState<string[]>([]);
   const [completedIds, setCompletedIds] = useState<Set<string>>(() => new Set(saved.snapshot.completed.keys()));
   const [resolvingFile, setResolvingFile] = useState<ConflictResolutionSession | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
@@ -104,14 +104,8 @@ function LearningSession() {
   const assessment = currentScenario ? assessGoal(state, currentScenario, lastAttempt?.command, lastAttempt?.result) : null;
   const guidance = operationGuidance(state);
   const hints = currentScenario ? lessonHints(currentScenario) : [];
-
-  // ターミナルの自動スクロール用Ref
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  // 出力が変更されたらターミナルの最下部にスクロール
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [output]);
+  const preparation = currentScenario ? preparationFor(currentScenario) : [];
+  const nextLesson = currentScenario ? recommendedNext(currentScenario.id, completedIds) : null;
 
   // ゴール達成時に紙吹雪を飛ばす
   useEffect(() => {
@@ -130,11 +124,13 @@ function LearningSession() {
    * 状態をシナリオの初期状態にリセットします。
    */
   const loadScenario = useCallback((scenario: Scenario) => {
+    setTerminalSession(previous => previous + 1);
     setHintLevel(0);
     setLastAttempt(null);
     setDeleteScope(null);
     setCurrentScenario(scenario);
     setIsGoalMet(false);
+    setCompletionReasons([]);
     setInput('');
     setSelectedFile(null);
     setResolvingFile(null);
@@ -147,7 +143,7 @@ function LearningSession() {
     }
     setState(engine.getState());
     setOutput([
-      { type: 'info', content: `Loaded: ${scenario.title}` },
+      { type: 'info', content: `演習を開始: ${scenario.title}` },
       { type: 'info', content: scenario.description }
     ]);
     setHistory([]);
@@ -157,7 +153,13 @@ function LearningSession() {
 
   useEffect(() => {
     const sync = (event: StorageEvent) => {
-      if (event.storageArea !== window.localStorage || (event.key !== null && !event.key.startsWith(PROGRESS_PREFIX))) return;
+      if (event.key !== null && !event.key.startsWith(PROGRESS_PREFIX)) return;
+      try {
+        if (event.storageArea !== window.localStorage) return;
+      } catch {
+        setSaveError('保存領域にアクセスできません。ブラウザの保存設定を確認して、保存を再試行してください。');
+        return;
+      }
       const snapshot = storeRef.current?.snapshot();
       if (snapshot) {
         // Read the current disk, not event.newValue: queued events may already be stale.
@@ -170,17 +172,39 @@ function LearningSession() {
   }, []);
 
   const saveSelection = (id: string | null, nextCategory = category, nextSearch = search) => {
-    const error = storeRef.current?.select({ lastId: id, category: nextCategory, search: nextSearch });
+    const error = storeRef.current?.select({ lastId: id, category: nextCategory, search: nextSearch }) ?? (storeRef.current ? null : '演習選択を保存できません。保存を再試行してください。');
     if (error) setSaveError(error);
   };
   const chooseScenario = (scenario: Scenario) => {
     loadScenario(scenario);
-    saveSelection(scenario.id);
+    const visible = visibleScenarios.some(item => item.id === scenario.id);
+    if (!visible) { setCategory('all'); setSearch(''); }
+    saveSelection(scenario.id, visible ? category : 'all', visible ? search : '');
     notify(`${scenario.title} を初期状態から開始しました。`);
     commandRef.current?.focus();
   };
-  const recordCompletion = (scenario: Scenario) => {
+  const resetFreePractice = () => {
+    engine.loadState(new GitEngine().getState());
+    setState(engine.getState());
+    setCurrentScenario(null);
+    setIsGoalMet(false);
+    setCompletionReasons([]);
+    setHintLevel(0);
+    setSelectedFile(null);
+    setResolvingFile(null);
+    setLastAttempt(null);
+    setDeleteScope(null);
+    setTerminalSession(previous => previous + 1);
+    setOutput([{ type: 'info', content: '自由練習です。演習を選ばずに模擬Gitを試せます。' }]);
+    setInput('');
+    setHistory([]);
+    setHistoryIndex(-1);
+    notify('自由練習を初期状態にリセットしました。完了記録は保持しています。');
+    commandRef.current?.focus();
+  };
+  const recordCompletion = (scenario: Scenario, assessment: GoalAssessment) => {
     setIsGoalMet(true);
+    setCompletionReasons(assessment.conditions.map(item => item.label));
     setCompletedIds(previous => new Set(previous).add(scenario.id));
     const timestamp = Date.now();
     const error = storeRef.current?.complete(scenario.id, timestamp) ?? (storeRef.current ? null : '保存領域を利用できません。保存を再試行してください。');
@@ -204,7 +228,9 @@ function LearningSession() {
         const error = storeRef.current.reveal(id, level);
         if (error) errors.push(error); else pendingHints.current.delete(id);
       }
-      errors.push(...storeRef.current.snapshot().warnings);
+      const snapshot = storeRef.current.snapshot();
+      setCompletedIds(new Set([...snapshot.completed.keys(), ...pendingCompletions.current.keys()]));
+      errors.push(...snapshot.warnings);
       setSaveError([...new Set(errors)].join(' '));
       notify(errors.length ? '保存を再試行しましたが、未保存の記録があります。' : '保存を再試行しました。');
     } catch { setSaveError('保存領域にアクセスできません。ブラウザの保存設定を確認してください。'); }
@@ -232,7 +258,7 @@ function LearningSession() {
     const next = hintLevel + 1;
     setHintLevel(next);
     const error = storeRef.current?.reveal(currentScenario.id, next) ?? (storeRef.current ? null : 'ヒント利用を保存できません。保存を再試行してください。');
-    if (error) { pendingHints.current.set(currentScenario.id, next); setSaveError(error); }
+    if (error) { pendingHints.current.set(currentScenario.id, Math.max(next, pendingHints.current.get(currentScenario.id) ?? 0)); setSaveError(error); }
     else pendingHints.current.delete(currentScenario.id);
   };
 
@@ -251,6 +277,7 @@ function LearningSession() {
     setHistoryIndex(-1); // Reset history index
 
     if (cmd === 'clear') {
+      setTerminalSession(previous => previous + 1);
       setOutput([]);
       setInput('');
       return;
@@ -274,9 +301,10 @@ function LearningSession() {
     setState(nextState);
     if (nextState.activeWorktree !== state.activeWorktree) setSelectedFile(null);
     if (resolvingFile && !engine.isConflictResolutionCurrent(resolvingFile)) setResolvingFile(null);
-    if (currentScenario && !isGoalMet && assessGoal(nextState, currentScenario, cmd, result).met) {
-      recordCompletion(currentScenario);
-      setOutput(prev => [...prev, { type: 'success', content: '🎉 Goal Met! Great job!' }]);
+    const nextAssessment = currentScenario ? assessGoal(nextState, currentScenario, cmd, result) : null;
+    if (currentScenario && !isGoalMet && nextAssessment?.met) {
+      recordCompletion(currentScenario, nextAssessment);
+      setOutput(prev => [...prev, { type: 'success', content: '達成条件を満たしました。完了後の解説を確認できます。' }]);
     } else if (!result.success) {
       notify(guidance?.title !== operationGuidance(nextState)?.title && operationGuidance(nextState)
         ? `${operationGuidance(nextState)!.title}。状態と復旧方法を確認してください。`
@@ -330,7 +358,8 @@ function LearningSession() {
     setState(engine.getState());
     setLastAttempt({ command: '', result });
     notify(result.success ? '競合の解決内容を適用しました。stageと続行の条件を確認してください。' : result.message);
-    if (currentScenario && !isGoalMet && assessGoal(engine.getState(), currentScenario, '', result).met) recordCompletion(currentScenario);
+    const nextAssessment = currentScenario ? assessGoal(engine.getState(), currentScenario, '', result) : null;
+    if (currentScenario && !isGoalMet && nextAssessment?.met) recordCompletion(currentScenario, nextAssessment);
     focusReturn.current = true;
   };
 
@@ -352,6 +381,7 @@ function LearningSession() {
 
   return (
     <main className="flex flex-col min-h-screen lg:flex-row lg:h-screen bg-gray-950 text-gray-100 font-sans lg:overflow-hidden">
+      <a href="#command-input" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:p-3 focus:bg-gray-900 focus:text-blue-200">コマンド入力へ移動</a>
       <div role="status" aria-live="polite" aria-atomic="true" className="sr-only"><span key={notice.count}>{notice.text}</span></div>
       {/* サイドバー: シナリオ */}
       <aside aria-label="学習する演習" className="lg:w-72 lg:shrink-0 max-h-96 lg:max-h-none bg-gray-900 border-b lg:border-b-0 lg:border-r border-gray-800 flex flex-col overflow-y-auto">
@@ -372,6 +402,9 @@ function LearningSession() {
             <input id="exercise-search" type="search" value={search} maxLength={512} onChange={event => { setSearch(event.target.value); saveSelection(currentScenario?.id ?? null, category, event.target.value); }} placeholder="操作やコマンド名" className="w-full min-h-11 bg-gray-950 text-gray-100 placeholder:text-gray-400 border border-gray-700 rounded px-3 focus-visible:outline-2 focus-visible:outline-blue-400" />
           </div>
           <p aria-live="polite" className="text-xs text-gray-300">{visibleScenarios.length} / {scenarios.length} 演習 · {completedIds.size} 完了</p>
+          {!currentScenario ? <button onClick={() => chooseScenario(learningPath[0])} className="min-h-11 px-2 border border-blue-500/50 rounded text-blue-200">基本操作から始める</button> : null}
+          <button onClick={() => { resetFreePractice(); saveSelection(null); }} className="min-h-11 px-2 border border-gray-600 rounded text-gray-200">自由練習に切り替える</button>
+          <p className="text-xs text-gray-300">切り替えると現在のGitの途中状態は破棄されます。完了記録は残ります。</p>
         </div>
         <details className="p-3 border-b border-gray-800 text-sm">
           <summary className="min-h-11 cursor-pointer focus-visible:outline-2 focus-visible:outline-blue-400">保存と再開</summary>
@@ -418,10 +451,10 @@ function LearningSession() {
         <div className="p-4 border-b border-gray-800 bg-gray-900 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Terminal className="w-5 h-5 text-green-400" />
-            <h1 className="font-bold text-lg">Terminal</h1>
+            <h1 className="font-bold text-lg">ターミナル</h1>
           </div>
           <button 
-            onClick={() => { if (currentScenario) { loadScenario(currentScenario); notify("演習を初期状態にリセットしました。保存記録は保持しています。"); commandRef.current?.focus(); } else { engine.loadState(new GitEngine().getState()); setState(engine.getState()); setSelectedFile(null); setResolvingFile(null); setLastAttempt(null); setOutput([]); setInput(''); setHistory([]); setHistoryIndex(-1); notify("自由練習をリセットしました。"); commandRef.current?.focus(); } }}
+            onClick={() => { if (currentScenario) { loadScenario(currentScenario); notify("演習を初期状態にリセットしました。保存記録は保持しています。"); commandRef.current?.focus(); } else resetFreePractice(); }}
             aria-label="現在の演習を最初からやり直す"
             className="min-w-11 min-h-11 flex items-center justify-center p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors"
             title="演習をやり直す"
@@ -431,7 +464,8 @@ function LearningSession() {
         </div>
         {state.activeWorktree ? <p className="px-4 py-2 text-xs font-mono text-gray-300 break-all border-b border-gray-800">仮想作業場所: {state.activeWorktree}</p> : null}
 
-        <div className="min-h-0 flex-1 overflow-auto flex flex-col">
+        <div className="min-h-0 flex-1 flex flex-col">
+        <div role={currentScenario || guidance ? 'region' : undefined} aria-label={currentScenario || guidance ? '演習の説明と操作案内' : undefined} tabIndex={currentScenario || guidance ? 0 : undefined} className="min-h-0 max-h-[60%] shrink-0 overflow-auto focus-visible:outline-2 focus-visible:outline-blue-400">
         {/* ターミナル内のシナリオ情報オーバーレイ */}
         {currentScenario && (
           <div className="bg-blue-900/20 border-b border-blue-500/20 p-3 text-sm">
@@ -440,6 +474,12 @@ function LearningSession() {
               達成条件:
             </div>
             <p className="text-gray-300 mt-1">{currentScenario.description}</p>
+            <details className="mt-2 text-gray-300">
+              <summary className="min-h-11 cursor-pointer">この演習の前提</summary>
+              <p>各演習は独立した初期状態から始まります。前の演習の途中状態や完了は必要ありません。</p>
+              {preparation.length ? <><p className="mt-2">先に練習すると理解しやすい操作:</p>
+                {preparation.map(item => <button key={item.id} onClick={() => chooseScenario(item)} className="block min-h-11 text-left text-blue-200 underline">{item.title}</button>)}</> : <p>Gitの初期化から始める演習です。</p>}
+            </details>
             <ul aria-label="達成条件" className="mt-2 space-y-1">
               {assessment?.conditions.map(condition => <li key={condition.id} className="break-words">
                 <span className={condition.met ? 'text-green-300' : 'text-gray-300'}>{condition.met ? '達成' : '未達'}: {condition.label}</span>
@@ -454,14 +494,27 @@ function LearningSession() {
               <button onClick={openHint} disabled={hintLevel >= 4} aria-expanded={hintLevel > 0} className="min-h-11 mt-1 px-3 border border-blue-500/50 rounded text-blue-200 disabled:opacity-50">{hintLevel < 4 ? `ヒント ${hintLevel + 1}: ${hints[hintLevel]?.title}を開く` : 'すべてのヒントを表示中'}</button>
             </div>
             {isGoalMet && (
+              <section aria-label="完了後の解説" className="mt-3 space-y-2">
               <motion.div 
-                initial={{ opacity: 0, y: 10 }}
+                initial={reducedMotion ? false : { opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
+                transition={reducedMotion ? { duration: 0 } : undefined}
                 className="mt-2 p-2 bg-green-500/20 text-green-300 rounded flex items-center gap-2 font-bold"
               >
                 <CheckCircle className="w-4 h-4" />
-                Level Completed!
+                演習を達成しました！
               </motion.div>
+              <h2 className="font-bold text-green-300">なぜ達成したか</h2>
+              <p className="text-gray-300">{lessonNotes[currentScenario.id].concept}</p>
+              <details className="text-gray-300">
+                <summary className="min-h-11 cursor-pointer">達成時に満たした条件</summary>
+                <ul className="space-y-1">{completionReasons.map((reason, index) => <li key={index} className="break-words">{reason}</li>)}</ul>
+                <p className="mt-2">達成した時点の記録です。その後の操作で現在の条件が変わることがあります。</p>
+              </details>
+              <p className="text-gray-300">実務での注意: {lessonNotes[currentScenario.id].caution}</p>
+              {nextLesson ? <button onClick={() => chooseScenario(nextLesson)} className="min-h-11 px-3 text-left border border-blue-500/50 rounded text-blue-200">次のおすすめ: {nextLesson.title}</button> : <p className="text-green-300">すべての演習に完了記録があります。自由に選んで復習できます。</p>}
+              <p className="text-gray-300">演習は一覧から自由に選べます。別の演習を選ぶと、現在のGitの途中状態は破棄されます。</p>
+              </section>
             )}
           </div>
         )}
@@ -476,24 +529,12 @@ function LearningSession() {
           <div className="p-3 border-b border-gray-700 space-y-2">
             <label htmlFor="rebase-todo" className="block font-bold text-sm">コミットの整理</label>
             <p className="text-sm text-gray-300">pick / reword / edit / squash / fixup / drop を指定し、行を並べ替えられます。</p>
-            <textarea id="rebase-todo" value={state.operation.todo ?? ''} onChange={event => { engine.setRebaseTodo(event.target.value); setState(engine.getState()); }} rows={4} spellCheck={false} className="w-full bg-gray-950 text-gray-100 border border-gray-700 rounded p-2 font-mono text-sm focus-visible:outline-2 focus-visible:outline-blue-400" />
+            <textarea id="rebase-todo" value={state.operation.todo ?? ''} onChange={event => { engine.setRebaseTodo(event.target.value); setState(engine.getState()); }} rows={4} autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} className="w-full bg-gray-950 text-gray-100 border border-gray-700 rounded p-2 font-mono text-base focus-visible:outline-2 focus-visible:outline-blue-400" />
             <p className="text-sm text-gray-300">編集後に git rebase --continue を実行してください。</p>
           </div>
         ) : null}
-        <div className="flex-1 min-h-32 overflow-auto p-4 font-mono text-sm space-y-2 bg-black/50">
-          {output.map((line, i) => (
-              <motion.div 
-                key={i} 
-                className={`whitespace-pre-wrap break-words ${line.type === 'error' ? 'text-red-400' : line.type === 'success' || line.type === 'command' || line.type === 'info' ? 'text-green-400' : 'text-gray-300'}`}
-                initial={{ opacity: 0, x: -5 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ duration: 0.1 }}
-              >
-                {line.content}
-              </motion.div>
-          ))}
-          <div ref={bottomRef} />
         </div>
+        <TerminalOutput key={terminalSession} lines={output} />
 
         </div>
         <form onSubmit={handleCommand} className="p-4 bg-gray-900 border-t border-gray-800">
@@ -501,6 +542,7 @@ function LearningSession() {
             <span className="text-green-400">$</span>
             <input
               ref={commandRef}
+              id="command-input"
               type="text"
               autoCapitalize="none"
               autoCorrect="off"
@@ -525,14 +567,14 @@ function LearningSession() {
           <div className="p-4 border-b border-gray-800 flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-bold text-lg flex items-center gap-2">
               <Play className="w-5 h-5 text-purple-400" />
-              Visualizer
+              コミットとファイル
             </h2>
             <div className="flex gap-4 text-sm text-gray-400">
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-blue-500"></span> Commit
+                <span className="w-3 h-3 rounded-full bg-blue-500"></span> コミット
               </div>
               <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-green-500"></span> Branch
+                <span className="w-3 h-3 rounded-full bg-green-500"></span> ブランチ
               </div>
               <div className="flex items-center gap-2">
                 <span className="w-3 h-3 rounded-full bg-yellow-500"></span> HEAD
@@ -544,8 +586,8 @@ function LearningSession() {
             <GitGraph state={state} />
             
             {Object.keys(state.commits).length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center text-gray-500 pointer-events-none">
-                <p>Waiting for commits...</p>
+              <div className="absolute inset-0 flex items-center justify-center text-gray-400 pointer-events-none">
+                <p>コミットを記録すると履歴が表示されます。</p>
               </div>
             )}
           </div>
@@ -553,12 +595,12 @@ function LearningSession() {
 
         {/* ワーキングディレクトリ / ファイルリスト */}
         <div className="flex-1 flex flex-col bg-gray-900 overflow-hidden">
-          <div className="p-3 border-b border-gray-800 font-bold text-sm text-gray-400 uppercase tracking-wider flex justify-between items-center">
-            <span>Working Directory</span>
+          <div className="p-3 border-b border-gray-800 font-bold text-sm text-gray-400 flex flex-wrap gap-2 justify-between items-center">
+            <span>作業ツリー</span>
             <span className="text-xs normal-case text-gray-300">
-              <span className="text-yellow-500">●</span> Mod
-              <span className="text-green-500 ml-2">●</span> Staged
-              <span className="text-red-500 ml-2">●</span> Conflict
+              <span className="text-yellow-500">●</span> 変更
+              <span className="text-green-500 ml-2">●</span> ステージ
+              <span className="text-red-500 ml-2">●</span> 競合
             </span>
           </div>
           <div ref={filePanelRef} onKeyDown={event => { if (event.key === "Escape" && (selectedFile || resolvingFile)) { event.preventDefault(); closeFile(); } }} className="flex-1 overflow-auto">

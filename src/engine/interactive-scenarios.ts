@@ -21,6 +21,6 @@ export const interactiveScenarios: Scenario[] = [
   lesson('interactive-drop', '不要なコミットを除外', 'Featureをdropし、文書のDocsだけを残してください。app.tsはversion 1に戻ります。',
     { parents: ['c1'], message: 'Docs', tree: { 'app.ts': 'version 1', 'README.md': 'Docs' } }, ['git rebase -i HEAD~2', 'simulate rebase todo "drop c2;pick c3"', 'git rebase --continue']),
   lesson('interactive-split', '一つのコミットを二つに分割', 'まとめて記録したapp.tsとREADME.mdを、AppとDocsの二つのコミットへ分割してください。editで一時停止し、mixed resetして記録し直します。',
-    { historyMessages: ['Docs', 'App', 'Initial'], tree: c3.tree }, ['git rebase -i HEAD~1', 'simulate rebase todo "edit c2"', 'git rebase --continue', 'git reset --mixed HEAD~1', 'git add app.ts', 'git commit -m "App"', 'git add README.md', 'git commit -m "Docs"', 'git rebase --continue'],
+    { historyMessages: ['Docs', 'App', 'Initial'], historyTrees: [{ 'app.ts': 'version 2', 'README.md': 'Docs' }, { 'app.ts': 'version 2', 'README.md': null }], tree: c3.tree }, ['git rebase -i HEAD~1', 'simulate rebase todo "edit c2"', 'git rebase --continue', 'git reset --mixed HEAD~1', 'git add app.ts', 'git commit -m "App"', 'git add README.md', 'git commit -m "Docs"', 'git rebase --continue'],
     { commits: { c1, c2: { ...c2, tree: c3.tree } }, branches: { main: 'c2' }, workingDirectory: c3.tree })
 ];

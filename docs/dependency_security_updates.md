@@ -82,3 +82,17 @@ CI=1 npm run test:e2e -- --workers=2 --retries=0
 監査のfixAvailableは`eslint-config-next@14.2.35`へのメジャー変更を示すが、検査互換性を崩して件数だけ減らす更新は採用しなかった。lint/型/テスト/buildの無効化は行っていない。bracesまたは親依存の修正と、ESLint 10対応pluginの移行はO04の後回し課題。今回lockfileの依存バージョン変更なし。
 
 今回もユニット494件、lint・型・本番ビルド、Chromium4サイズ/Firefox/WebKitのE2E計192件が成功した。アプリ検証は[学習体験改善の記録](learning_experience.md)を参照する。
+
+## 学習説明・操作性改善時の再確認
+
+2026-10-03 JST、基点 `a94b380` と今回のlockfileを確認。`npm audit`はHigh 5件で終了コード1、`npm audit --omit=dev`は0件で終了コード0。本番/開発の集計を分け、既存の履歴は保持する。
+
+依存経路は引き続き `eslint-config-next → @next/eslint-plugin-next → fast-glob → micromatch → braces`。[bracesの公式告知](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)は修正版なし。深く入れ子になったbrace patternをNodeで解析するとstack overflowによる停止が起きる。アプリの学習コマンド/ファイル内容はこの開発用glob経路へ渡さず、通常のブラウザ学習がこの告知の入力条件を満たすとは確認していない。信頼しないパターンを扱うlint/toolingでは残課題となる。
+
+最新eslint-plugin-react/jsx-a11y/importのpeerDependenciesはESLint 10を含まないことをnpm registryで再確認した。監査の候補 `eslint-config-next@14.2.35` への互換性を崩す変更は採用しない。修正版または親依存/plugin対応が出た時に移行を検証する。
+
+アクセシビリティE2Eの実行依存を明確にするため、既にlockfileに存在するaxe-core 4.11.0を直接devDependencyにも指定した。依存バージョン変更はなく、npm 10の再生成で省かれたplatform libcメタデータを保持した。
+
+CIは [checkout](https://github.com/actions/checkout)、[setup-node](https://github.com/actions/setup-node)、[upload-artifact](https://github.com/actions/upload-artifact) をv7へ更新した。公式のNode 24実行ランタイムとUbuntu 24.04での互換性を確認し、アプリ用Node 22の指定は維持する。最終的な実行結果は今回のPR checksと [改善記録](learning_refinements.md) に記録する。月次Dependabotと手動監査の手順を [runbook](release_runbook.md) に設定し、検査の無効化やaudit --forceは行わない。
+
+CI run [37104472184](https://github.com/jinxin4869/git_study_app/actions/runs/37104472184) はSHA `107e773` で全チェック成功（unit565、E2E252、再試行なし）。ActionsのNode 20非推奨警告は解消し、ESLint 9のdeprecated警告は上記peer制約で残る。ubuntu-latestのUbuntu 26への自動切替予定も通知されたため、検証済みの `ubuntu-24.04` をCIに明示指定した。[公式の移行告知](https://github.com/actions/runner-images/issues/14748) と新しいPlaywrightの対応OSを確認してから、別途OS版を更新する。固定ラベルのOS更新は通常のrunnerイメージ更新を受ける。最終SHAの実行はPR checksを参照する。

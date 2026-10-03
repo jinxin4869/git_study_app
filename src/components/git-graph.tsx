@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { GitState } from '@/types/git';
 import { calculateGraphLayout } from '@/utils/graph-layout';
 
@@ -10,6 +10,7 @@ interface GitGraphProps {
 }
 
 export function GitGraph({ state }: GitGraphProps) {
+  const reducedMotion = useReducedMotion();
   const { nodes, links } = useMemo(() => {
     return calculateGraphLayout(state);
   }, [state]);
@@ -47,7 +48,10 @@ export function GitGraph({ state }: GitGraphProps) {
 
   return (
     <div ref={viewportRef} role="region" aria-label="コミットグラフ" tabIndex={0} className="focus-visible:outline-2 focus-visible:outline-blue-400 w-full h-full bg-gray-900 overflow-auto p-4">
-      <svg width={graphWidth} height={graphHeight} className="min-w-full min-h-full">
+      <svg role="img" aria-label="コミットの親子とブランチの位置" width={graphWidth} height={graphHeight} className="min-w-full min-h-full">
+        <desc>{`HEADは${state.HEAD.type === 'branch' ? 'ブランチ' : 'コミット'} ${state.HEAD.value}。` +
+          Object.entries(state.branches).map(([name, id]) => `ブランチ ${name} は ${id || '未作成のコミット'}。`).join('') +
+          nodes.map(node => { const commit = state.commits[node.id]; return `${node.id}: ${commit.message}。親は${commit.parents.join('、') || 'なし'}。`; }).join('')}</desc>
         {/* Links */}
         {links.map((link, i) => (
           <motion.line
@@ -58,9 +62,9 @@ export function GitGraph({ state }: GitGraphProps) {
             y2={link.target.y}
             stroke="#4B5563"
             strokeWidth="2"
-            initial={{ pathLength: 0, opacity: 0 }}
+            initial={reducedMotion ? false : { pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 1 }}
-            transition={{ duration: 0.5 }}
+            transition={reducedMotion ? { duration: 0 } : { duration: 0.5 }}
           />
         ))}
 
@@ -68,9 +72,9 @@ export function GitGraph({ state }: GitGraphProps) {
         {nodes.map((node) => (
           <motion.g
             key={node.id}
-            initial={{ scale: 0, opacity: 0 }}
+            initial={reducedMotion ? false : { scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+            transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 20 }}
           >
             <circle
               cx={node.x}
@@ -129,7 +133,7 @@ export function GitGraph({ state }: GitGraphProps) {
              return (
               <motion.g
                 key="detached-head"
-                initial={{ opacity: 0 }}
+                initial={reducedMotion ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
               >
                 <rect

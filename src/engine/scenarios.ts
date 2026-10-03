@@ -110,7 +110,7 @@ export const scenarios: Scenario[] = [
   {
     id: 'level-1-5',
     title: 'Level 1-5: 最初のコミット',
-    description: 'ステージングされた変更をリポジトリに記録（コミット）しましょう。',
+    description: 'ステージングされたREADME.mdをリポジトリに記録（コミット）しましょう。',
     difficulty: 'beginner',
     initialState: {
       commits: {},
@@ -124,10 +124,7 @@ export const scenarios: Scenario[] = [
       remoteBranches: {},
       mockServers: {}
     },
-    goal: {
-      type: 'commit_count',
-      params: { count: 1 }
-    },
+    goal: {"type": "state_matches", "params": {"commitCount": 1, "committedFiles": ["README.md"]}},
     hints: [
       '`git commit -m "First commit"` のようにメッセージを添えて実行します。',
       'メッセージは変更内容を簡潔に説明するものにします。'
@@ -164,7 +161,7 @@ export const scenarios: Scenario[] = [
   {
     id: 'level-1-7',
     title: 'Level 1-7: ファイルの変更',
-    description: '既存のファイルを変更してみましょう。`README.md` に内容を追記します。',
+    description: '既存のファイルを変更してみましょう。`README.md` の内容を上書きします（例: Hello Git）。',
     difficulty: 'beginner',
     initialState: {
       commits: {
@@ -220,7 +217,7 @@ export const scenarios: Scenario[] = [
   {
     id: 'level-1-9',
     title: 'Level 1-9: 変更のコミット',
-    description: '変更したファイルを再度ステージングして、新しいコミットとして記録しましょう。',
+    description: 'README.mdのHello Gitを再度ステージングして、新しいコミットとして記録しましょう。',
     difficulty: 'beginner',
     initialState: {
       commits: {
@@ -236,10 +233,7 @@ export const scenarios: Scenario[] = [
       remoteBranches: {},
       mockServers: {}
     },
-    goal: {
-      type: 'commit_count',
-      params: { count: 2 }
-    },
+    goal: {"type": "state_matches", "params": {"commitCount": 2, "tree": {"README.md": "Hello Git"}}},
     hints: [
       'まず `git add README.md` でステージングします。',
       '次に `git commit -m "Update README"` でコミットします。'
@@ -349,10 +343,7 @@ export const scenarios: Scenario[] = [
       remoteBranches: {},
       mockServers: {}
     },
-    goal: {
-      type: 'file_exists',
-      params: { name: 'feature.txt' }
-    },
+    goal: {"type": "state_matches", "params": {"branch": "feature", "workingPresent": ["feature.txt"]}},
     hints: [
       '`touch feature.txt` コマンドでファイルを作成します。'
     ]
@@ -376,10 +367,7 @@ export const scenarios: Scenario[] = [
       remoteBranches: {},
       mockServers: {}
     },
-    goal: {
-      type: 'commit_count',
-      params: { count: 2 }
-    },
+    goal: {"type": "state_matches", "params": {"commitCount": 2, "branch": "feature", "committedFiles": ["feature.txt"], "branches": {"main": "c1"}}},
     hints: [
       '`git add feature.txt`',
       '`git commit -m "Add feature"`'
@@ -462,10 +450,7 @@ export const scenarios: Scenario[] = [
       remoteBranches: {},
       mockServers: {}
     },
-    goal: {
-      type: 'file_exists',
-      params: { name: 'main.txt' }
-    },
+    goal: {"type": "state_matches", "params": {"branch": "main", "workingPresent": ["main.txt"]}},
     hints: [
       '`touch main.txt`'
     ]
@@ -490,10 +475,7 @@ export const scenarios: Scenario[] = [
       remoteBranches: {},
       mockServers: {}
     },
-    goal: {
-      type: 'commit_count',
-      params: { count: 2 } // mainブランチの履歴内
-    },
+    goal: {"type": "state_matches", "params": {"commitCount": 2, "branch": "main", "committedFiles": ["main.txt"], "branches": {"feature": "c2"}}},
     hints: [
       '`git add main.txt`',
       '`git commit -m "Add main.txt"`'
@@ -606,10 +588,7 @@ export const scenarios: Scenario[] = [
       remoteBranches: {},
       mockServers: {}
     },
-    goal: {
-      type: 'commit_count',
-      params: { count: 3 }
-    },
+    goal: {"type": "state_matches", "params": {"commitCount": 3, "branch": "feature2", "committedFiles": ["feature2.txt"], "branches": {"main": "c2"}}},
     hints: [
       '1. `git checkout -b feature2`',
       '2. `touch feature2.txt`',
@@ -671,10 +650,7 @@ export const scenarios: Scenario[] = [
       remoteBranches: {},
       mockServers: {}
     },
-    goal: {
-      type: 'merge_complete',
-      params: { branch: 'main' }
-    },
+    goal: {"type": "state_matches", "params": {"branch": "main", "parents": ["c4", "c3"], "tree": {"feature.txt": "Feature", "main-update.txt": "Main", "feature2.txt": "Feature2"}}},
     hints: [
       '`git merge feature2` を実行します。',
       '自動的にマージコミットが作成されます。'
@@ -954,10 +930,7 @@ export const scenarios: Scenario[] = [
       remoteBranches: {},
       mockServers: {}
     },
-    goal: {
-      type: 'branch_exists',
-      params: { check_detached: true }
-    },
+    goal: {"type": "state_matches", "params": {"detached": true, "head": "c1"}},
     hints: [
       '`git checkout c1` を実行します。',
       'これで "Detached HEAD" 状態になります。'
@@ -1104,10 +1077,7 @@ export const scenarios: Scenario[] = [
       remoteBranches: {},
       mockServers: {}
     },
-    goal: {
-      type: 'merge_complete',
-      params: { branch: 'main' }
-    },
+    goal: {"type": "state_matches", "params": {"branch": "main", "parents": ["c2", "c3"], "acceptedTreeContents": {"index.html": ["<html>\n<body>\n<h1>Hello World</h1>\n</body>\n</html>", "<html>\n<body>\n<h1>Hello Git</h1>\n</body>\n</html>", "<html>\n<body>\n<h1>Hello World</h1>\n<h1>Hello Git</h1>\n</body>\n</html>"]}}},
     hints: [
       '1. `git add index.html`',
       '2. `git commit -m "Merge feature"`'

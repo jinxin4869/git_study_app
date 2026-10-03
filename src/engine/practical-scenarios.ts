@@ -44,7 +44,7 @@ export const practicalScenarios: Scenario[] = [
     workingDirectory: { ...original, 'app.ts': 'experiment' },
     index: { 'app.ts': { path: 'app.ts', status: 'staged', content: 'version 2' } }
   }, { type: 'state_matches', params: { working: { 'app.ts': 'version 2' }, index: { 'app.ts': 'version 2' } } }, ['git restore app.ts']),
-  exercise('daily-delete', '削除を記録', '不要になったREADME.mdをgit rmで削除し、コミットにも削除を記録してください。', {},
+  exercise('daily-delete', '削除を記録', '不要になったREADME.mdを削除し、コミットにも削除を記録してください。', {},
     { type: 'state_matches', params: { message: 'Remove README', missingCommitted: 'README.md', working: { 'README.md': null } } }, ['git rm README.md', 'git commit -m "Remove README"']),
   exercise('daily-move', '名前変更を記録', 'app.tsをmain.tsへ移動してコミットしてください。ファイル内容を保持します。', {},
     { type: 'state_matches', params: { tree: { 'app.ts': null, 'main.ts': 'version 1' }, working: { 'app.ts': null, 'main.ts': 'version 1' } } }, ['git mv app.ts main.ts', 'git commit -m "Rename app"']),
@@ -57,5 +57,5 @@ export const practicalScenarios: Scenario[] = [
     { type: 'branch_exists', params: { name: 'feature/login', checkedOut: true } }, ['git switch -c feature/login']),
   exercise('daily-split', '変更を目的別に記録', 'app.tsとREADME.mdの変更を、アプリ修正と文書修正の二つに分けてコミットしてください。最後のメッセージはUpdate docsにします。', {
     workingDirectory: { 'app.ts': 'version 2', 'README.md': 'Updated' }
-  }, { type: 'state_matches', params: { historyMessages: ['Update docs', 'Update app', 'Initial commit'], tree: { 'app.ts': 'version 2', 'README.md': 'Updated' }, clean: true } }, ['git add app.ts', 'git commit -m "Update app"', 'git add README.md', 'git commit -m "Update docs"'])
+  }, { type: 'state_matches', params: { historyMessages: ['Update docs', 'Update app', 'Initial commit'], historyTrees: [{ 'app.ts': 'version 2', 'README.md': 'Updated' }, { 'app.ts': 'version 2', 'README.md': 'Project' }], tree: { 'app.ts': 'version 2', 'README.md': 'Updated' }, clean: true } }, ['git add app.ts', 'git commit -m "Update app"', 'git add README.md', 'git commit -m "Update docs"'])
 ];

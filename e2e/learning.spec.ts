@@ -48,8 +48,8 @@ async function capture(page: Page, name: string) {
 
 test('home footer stays below the start button and navigation works', async ({ page }) => {
   await page.goto('/');
-  const start = page.getByRole('link', { name: 'Start Learning' });
-  const footer = page.getByText('Built for developers, by developers.', { exact: true });
+  const start = page.getByRole('link', { name: '学習を始める' });
+  const footer = page.getByText('進捗はこのブラウザに保存します。実リポジトリには接続しません。', { exact: true });
   await expect(start).toBeVisible();
   await expect(footer).toBeVisible();
   await expect(footer).toHaveCSS('opacity', '1');
@@ -70,7 +70,7 @@ test('search, empty results, completion, history and reset', async ({ page }) =>
   await expect(page.getByText('該当する演習がありません。検索語やコースを変更してください。')).toBeVisible();
   await choose(page, '基本操作', 'Level 1-3');
   await run(page, 'git status');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
   const input = page.getByRole('textbox', { name: '演習コマンド' });
   await input.press('ArrowUp');
   await expect(input).toHaveValue('git status');
@@ -80,9 +80,9 @@ test('search, empty results, completion, history and reset', async ({ page }) =>
   expect(box?.height).toBeGreaterThanOrEqual(44);
   await page.getByRole('button', { name: 'README.mdを開く' }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: 'Close preview' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'プレビューを閉じる' })).toBeVisible();
   await reset.click();
-  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
   await noPageOverflow(page);
 });
 
@@ -91,21 +91,21 @@ test('conflict requires a decision and can be resolved and committed', async ({ 
   await choose(page, 'コンフリクト', 'Level 7-1');
   await run(page, 'git merge feature');
   await page.getByRole('button', { name: 'index.htmlを開く' }).click();
-  const complete = page.getByRole('button', { name: 'Complete Merge' });
+  const complete = page.getByRole('button', { name: '解消内容を適用' });
   await expect(complete).toBeDisabled();
-  for (const name of ['Cancel', 'Accept Current', 'Accept Incoming', 'Accept Both', 'Complete Merge']) {
+  for (const name of ['キャンセル', '現在側を採用', '取り込み側を採用', '両方を採用', '解消内容を適用']) {
     const box = await page.getByRole('button', { name, exact: true }).boundingBox();
     expect(box?.height, name).toBeGreaterThanOrEqual(44);
   }
   await noPageOverflow(page);
   await capture(page, 'conflict');
-  await page.getByRole('button', { name: 'Accept Both' }).click();
+  await page.getByRole('button', { name: '両方を採用' }).click();
   await expect(complete).toBeEnabled();
   await complete.click();
   await run(page, 'git add index.html');
   await run(page, 'git commit -m "Resolve"');
   await expect(page.getByRole('region', { name: 'コミットグラフ' }).locator('text').filter({ hasText: /^Resolve$/ })).toBeVisible();
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
 });
 
 test('aborting a merge closes the old solver and a repeated merge requires new decisions', async ({ page }) => {
@@ -113,52 +113,52 @@ test('aborting a merge closes the old solver and a repeated merge requires new d
   await choose(page, 'コンフリクト', 'Level 7-1');
   await run(page, 'git merge feature');
   await page.getByRole('button', { name: 'index.htmlを開く' }).click();
-  await page.getByRole('button', { name: 'Accept Both' }).click();
+  await page.getByRole('button', { name: '両方を採用' }).click();
   await run(page, 'git status');
-  await expect(page.getByRole('button', { name: 'Complete Merge' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '解消内容を適用' })).toBeEnabled();
   await run(page, 'git merge --abort');
-  await expect(page.getByRole('button', { name: 'Complete Merge' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '解消内容を適用' })).toHaveCount(0);
   await page.getByRole('button', { name: 'index.htmlを開く' }).click();
   await expect(page.locator('pre').filter({ hasText: '<h1>Hello World</h1>' })).toBeVisible();
-  await page.getByRole('button', { name: 'Close preview' }).click();
+  await page.getByRole('button', { name: 'プレビューを閉じる' }).click();
   await run(page, 'git merge feature');
   await page.getByRole('button', { name: 'index.htmlを開く' }).click();
-  await expect(page.getByRole('button', { name: 'Complete Merge' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: '解消内容を適用' })).toBeDisabled();
 });
 
 test('editing a conflict from the terminal closes the solver and empty content does not pass', async ({ page }) => {
   await page.goto('/game');
   await choose(page, 'コンフリクト', 'Level 7-3');
   await page.getByRole('button', { name: 'index.htmlを開く' }).click();
-  await page.getByRole('button', { name: 'Accept Both' }).click();
+  await page.getByRole('button', { name: '両方を採用' }).click();
   await run(page, 'echo "" > index.html');
-  await expect(page.getByRole('button', { name: 'Complete Merge' })).toHaveCount(0);
-  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '解消内容を適用' })).toHaveCount(0);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '現在の演習を最初からやり直す' }).click();
   await page.getByRole('button', { name: 'index.htmlを開く' }).click();
-  await expect(page.getByRole('button', { name: 'Complete Merge' })).toBeDisabled();
-  await page.getByRole('button', { name: 'Accept Current', exact: true }).click();
-  await page.getByRole('button', { name: 'Complete Merge' }).click();
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '解消内容を適用' })).toBeDisabled();
+  await page.getByRole('button', { name: '現在側を採用', exact: true }).click();
+  await page.getByRole('button', { name: '解消内容を適用' }).click();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
 });
 
 test('invalid status arguments do not complete a command exercise', async ({ page }) => {
   await page.goto('/game');
   await choose(page, '基本操作', 'Level 1-3');
   await run(page, 'git status --not-a-real-option');
-  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
   await run(page, 'git status');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
 });
 
 test('invalid commit arguments do not create a commit or complete an exercise', async ({ page }) => {
   await page.goto('/game');
   await choose(page, '基本操作', 'Level 1-5');
   await run(page, 'git commit --not-a-real-option -m "Invalid commit"');
-  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'コミットグラフ' }).locator('text').filter({ hasText: /^Invalid commit$/ })).toHaveCount(0);
   await run(page, 'git commit -m "First commit"');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
 });
 
 for (const choice of ['Incoming', 'Both']) {
@@ -166,9 +166,9 @@ for (const choice of ['Incoming', 'Both']) {
     await page.goto('/game');
     await choose(page, 'コンフリクト', 'Level 7-3');
     await page.getByRole('button', { name: 'index.htmlを開く' }).click();
-    await page.getByRole('button', { name: `Accept ${choice}`, exact: true }).click();
-    await page.getByRole('button', { name: 'Complete Merge' }).click();
-    await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: choice === 'Both' ? '両方を採用' : '取り込み側を採用', exact: true }).click();
+    await page.getByRole('button', { name: '解消内容を適用' }).click();
+    await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'index.htmlを開く' }).click();
     const expected = '<html>\n<body>\n' + (choice === 'Both' ? '<h1>Hello World</h1>\n' : '') + '<h1>Hello Git</h1>\n</body>\n</html>';
     await expect(page.locator('pre')).toHaveText(expected);
@@ -181,7 +181,7 @@ test('interactive rebase completes and keeps the entire HEAD label visible', asy
   await run(page, 'git rebase -i HEAD~2');
   await page.getByLabel('コミットの整理').fill('pick c2\nfixup c3');
   await run(page, 'git rebase --continue');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
   await headVisible(page);
   const contrast = await page.evaluate(() => {
     const canvas = document.createElement('canvas');
@@ -202,7 +202,7 @@ test('interactive rebase completes and keeps the entire HEAD label visible', asy
       return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
     };
     const legend = [...document.querySelectorAll('span')].find(element =>
-      ['Mod', 'Staged', 'Conflict'].every(word => element.textContent?.includes(word)))!;
+      ['変更', 'ステージ', '競合'].every(word => element.textContent?.includes(word)))!;
     let surface = legend.parentElement!;
     while (getComputedStyle(surface).backgroundColor === 'rgba(0, 0, 0, 0)' && surface.parentElement) surface = surface.parentElement;
     const head = [...document.querySelectorAll('[aria-label="コミットグラフ"] text')].find(element => element.textContent?.includes('(HEAD)'))!;
@@ -233,20 +233,20 @@ test('partial staging commits only the selected change', async ({ page }) => {
   await page.goto('/game');
   await choose(page, '日常操作・取り消し', '一ファイルの変更を分けて記録');
   for (const command of ['git add -p app.ts', 'y', 'n', 'git commit -m "Enable feature"']) await run(page, command);
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
 });
 
 test('mock PR cannot merge until both approval and CI pass', async ({ page }) => {
   await page.goto('/game');
   await choose(page, 'GitHub・PR・レビュー・CI', '承認とCIを満たしてマージ');
   await run(page, 'gh pr merge 1 --merge');
-  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
   await run(page, 'simulate review approve 1');
   await run(page, 'gh pr merge 1 --merge');
-  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
   await run(page, 'simulate ci pass 1');
   await run(page, 'gh pr merge 1 --merge');
-  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
 });
 
 test('preview follows edits, branch changes, deletion and renaming', async ({ page }) => {
@@ -274,7 +274,7 @@ test('preview follows edits, branch changes, deletion and renaming', async ({ pa
   await run(page, 'git commit -m "Recreate"');
   await run(page, 'git mv README.md renamed.md');
   await expect(page.getByText('このファイルは現在の作業ツリーにありません。', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Close preview' }).click();
+  await page.getByRole('button', { name: 'プレビューを閉じる' }).click();
   await page.getByRole('button', { name: 'renamed.mdを開く' }).click();
   await expect(page.locator('pre')).toHaveText('recreated');
 });
@@ -305,7 +305,7 @@ test('special folder and filenames can be expanded and previewed', async ({ page
     if (path.includes('/')) await page.getByRole('button', { name: `${path.split('/')[0]}フォルダ` }).click();
     await page.getByRole('button', { name: `${path}を開く` }).click();
     await expect(page.locator('pre')).toHaveText(`content for ${path}`);
-    await page.getByRole('button', { name: 'Close preview' }).click();
+    await page.getByRole('button', { name: 'プレビューを閉じる' }).click();
   }
   await noPageOverflow(page);
 });
@@ -343,7 +343,7 @@ test('changing worktrees closes the preview and shows the destination content', 
   await page.getByRole('button', { name: 'app.tsを開く' }).click();
   await expect(page.locator('pre')).toHaveText('draft');
   await run(page, 'cd ../hotfix');
-  await expect(page.getByRole('button', { name: 'Close preview' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'プレビューを閉じる' })).toHaveCount(0);
   await page.getByRole('button', { name: 'app.tsを開く' }).click();
   await expect(page.locator('pre')).toHaveText('base');
   await run(page, 'cd ../project');
