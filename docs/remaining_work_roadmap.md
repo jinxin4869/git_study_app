@@ -360,7 +360,7 @@ F09の30件は重複した依存経路を含むパッケージ単位の集計で
 
 ## 残作業の再評価（基点 `a94b380`、PR #5取込後）
 
-以下が最新の分類。前節はPR #5時点の履歴であり、削除しない。今回の作業は `feat/learning-explanations-and-usability`。作業開始時のworktree/stash/ブランチ確認と、現在の検証は [今回の改善記録](learning_refinements.md)、教材別の具体的な確認は [139演習レビュー](lesson_review.md)、公開/戻し方は [runbook](release_runbook.md) を参照する。
+以下が最新の分類。前節はPR #5時点の履歴であり、削除しない。今回の作業は `feat/learning-explanations-and-usability`、[PR #6](https://github.com/jinxin4869/git_study_app/pull/6)。作業開始時のworktree/stash/ブランチ確認と、現在の検証は [今回の改善記録](learning_refinements.md)、教材別の具体的な確認は [139演習レビュー](lesson_review.md)、公開/戻し方は [runbook](release_runbook.md) を参照する。
 
 「今回実装」は下表に記した範囲を完了させる。広いIDの残りや、利用できない実機の検証は明示して残す。将来の候補をすべて導入すること、既存の保存済み完了を消すこと、採点を弱めることは完了条件にしない。
 

@@ -56,7 +56,7 @@ npm run test:e2e:production
 
 ローカルWebKitだけはPR #5と同じ一時ランチャーで公式WebKit 2359と展開したOS依存を使用した。標準設定/CIは `npx playwright install --with-deps chromium firefox webkit`。一時ローカル設定はコミットしない。テスト/検査のskipや監査無効化は行わない。
 
-最終CI/PR Previewの結果はPR作成後に追記する。再試行前提で成功とせず、CIでのみ再試行した経路があれば明示する。
+最終CI/PR Previewの対象SHAと実行結果は [PR #6のchecks](https://github.com/jinxin4869/git_study_app/pull/6/checks) を参照する。ここに記載したローカル/公開mainの結果と区別する。再試行前提で成功とせず、CIでのみ再試行した経路があればPRにも明示する。
 
 実機IME、実ソフトキーボード、実スクリーンリーダー、実Safariにはこの環境からアクセスできない。合成IMEイベント・ブラウザ自動操作・SVG代替テキストだけで実機の適合完了とはしない。
 
@@ -87,7 +87,7 @@ executeの途中、例えばコミット更新後に例外が起きた場合は�
 
 公開aliasの4フロー×PC/390px幅の8件は成功した。対象は今回PR前の公開main版 `a94b380`。ホームからヒントなしで達成、選択/完了の復元とGitの初期化、リセットと保存削除、複数タブの独立完了、失敗入力、rebase中断とフォーカス復帰を確認した。公開設定は `playwright.production.config.ts`、通常のlocalhost E2Eとは独立している。
 
-今回の新UIはまだmainへマージしていないため公開本番上では未検証。PR Previewのビルド/画面の可否とCIはPR作成後の結果を追記する。本番公開後の再確認と実rollbackは [runbook](release_runbook.md) の手順で、公開権限を持つ所有者が行う。
+今回の新UIはまだmainへマージしていないため公開本番上では未検証。PR Previewのビルド/画面の可否とCIは [PR #6](https://github.com/jinxin4869/git_study_app/pull/6) の検証記録を参照する。本番公開後の再確認と実rollbackは [runbook](release_runbook.md) の手順で、公開権限を持つ所有者が行う。
 
 ## 手動確認の残る範囲
 
