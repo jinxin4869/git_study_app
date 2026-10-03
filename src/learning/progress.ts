@@ -5,16 +5,25 @@ export interface Selection { lastId: string | null; category: string; search: st
 export interface ProgressSnapshot extends Selection {
   completed: Map<string, number>;
   hints: Map<string, number>;
+  unreadableCompletions: Set<string>;
   warnings: string[];
 }
 type StoragePort = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>;
 const emptySelection: Selection = { lastId: null, category: 'all', search: '' };
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+class StorageReadError extends Error {}
+
+/** Retain known records only when storage could not be read, never after a verified deletion. */
+export function completedFromSnapshot(snapshot: ProgressSnapshot, previous: ReadonlySet<string>, unsaved: Iterable<string>): Set<string> {
+  return new Set([...snapshot.completed.keys(), ...[...previous].filter(id => snapshot.unreadableCompletions.has(id)), ...unsaved]);
+}
 
 export class ProgressStore {
   constructor(private storage: StoragePort, private ids: Set<string>, private categories: Set<string>) {}
   private read(key: string): Record<string, unknown> | null {
-    const raw = this.storage.getItem(key);
+    let raw: string | null;
+    try { raw = this.storage.getItem(key); }
+    catch { throw new StorageReadError('保存領域を読み取れません。'); }
     if (raw === null) return null;
     if (raw.length > 10000) throw new Error('保存データが大きすぎます。');
     const value: unknown = JSON.parse(raw);
@@ -23,9 +32,14 @@ export class ProgressStore {
     return value;
   }
   snapshot(): ProgressSnapshot {
-    const snapshot: ProgressSnapshot = { ...emptySelection, completed: new Map(), hints: new Map(), warnings: [] };
-    const safely = (read: () => void) => {
-      try { read(); } catch { snapshot.warnings.push('保存データを一部読み込めません。壊れたデータ・未対応バージョン・保存へのアクセス制限を確認し、必要なら保存記録を削除してください。'); }
+    const snapshot: ProgressSnapshot = { ...emptySelection, completed: new Map(), hints: new Map(), unreadableCompletions: new Set(), warnings: [] };
+    const safely = (read: () => void, completionId?: string) => {
+      try { read(); } catch (error) {
+        if (error instanceof StorageReadError) {
+          if (completionId) snapshot.unreadableCompletions.add(completionId);
+          snapshot.warnings.push('保存領域を読み取れません。読み取れない完了記録はこの画面の表示を保持しています。保存の許可を確認して再試行してください。');
+        } else snapshot.warnings.push('保存データを一部読み込めません。壊れたデータ・未対応バージョン・保存へのアクセス制限を確認し、必要なら保存記録を削除してください。');
+      }
     };
     safely(() => {
       const data = this.read(SELECTION_KEY);
@@ -41,7 +55,7 @@ export class ProgressStore {
         if (!data) return;
         if (data.id !== id || typeof data.completedAt !== 'number' || !Number.isSafeInteger(data.completedAt) || data.completedAt < 0) throw new Error('Invalid completion');
         snapshot.completed.set(id, data.completedAt);
-      });
+      }, id);
       safely(() => {
         const data = this.read(`${PROGRESS_PREFIX}hint:${id}`);
         if (!data) return;
@@ -85,16 +99,30 @@ export class ProgressStore {
     return this.write(`${PROGRESS_PREFIX}hint:${id}`, { id, level });
   }
   clear(id?: string): string | null {
+    const removed = new Map<string, string>();
     try {
-      if (id) {
-        if (!this.ids.has(id)) return '演習IDが無効です。';
-        this.storage.removeItem(`${PROGRESS_PREFIX}complete:${id}`);
-        this.storage.removeItem(`${PROGRESS_PREFIX}hint:${id}`);
-      } else {
-        const keys = Array.from({ length: this.storage.length }, (_, i) => this.storage.key(i));
-        for (const key of keys) if (key?.startsWith(PROGRESS_PREFIX)) this.storage.removeItem(key);
+      if (id && !this.ids.has(id)) return '演習IDが無効です。';
+      const keys = id ? [`${PROGRESS_PREFIX}complete:${id}`, `${PROGRESS_PREFIX}hint:${id}`] :
+        Array.from({ length: this.storage.length }, (_, i) => this.storage.key(i)).filter((key): key is string => !!key?.startsWith(PROGRESS_PREFIX));
+      // Read all selected records before deleting any, so a denied read cannot cause a partial deletion.
+      const records = keys.map(key => [key, this.storage.getItem(key)] as const);
+      for (const [key, value] of records) {
+        if (value === null) continue;
+        this.storage.removeItem(key);
+        removed.set(key, value);
       }
       return null;
-    } catch { return '保存記録を削除できません。保存の許可を確認して再試行してください。'; }
+    } catch {
+      let restoreFailed = false;
+      for (const [key, value] of removed) {
+        try {
+          // Do not replace a newer record written by another tab during this operation.
+          if (this.storage.getItem(key) === null) this.storage.setItem(key, value);
+        } catch { restoreFailed = true; }
+      }
+      return restoreFailed
+        ? '保存記録の削除が途中で失敗し、一部を戻せませんでした。削除済みの記録がある可能性があります。保存の許可を確認して、もう一度削除してください。'
+        : '保存記録を削除できません。保存の許可を確認して、もう一度削除してください。';
+    }
   }
 }

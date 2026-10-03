@@ -8,6 +8,7 @@ import { isIgnored } from './gitignore';
 import { diffLines } from 'diff';
 import { fileStates } from './file-states';
 import { tokenizeCommand, validateCommandOptions } from './command-input';
+import { isUnmerged, hasUnmergedPaths, clearUnmergedPaths } from './conflicts';
 
 export interface ConflictResolutionSession {
   path: string;
@@ -62,12 +63,12 @@ export class GitEngine {
 
   public openConflictResolution(path: string): ConflictResolutionSession | null {
     const content = this.state.workingDirectory[path];
-    return content?.includes('<<<<<<<') ? { path, content, revision: this.revision } : null;
+    return isUnmerged(this.state, path) && content?.includes('<<<<<<<') ? { path, content, revision: this.revision } : null;
   }
 
   public isConflictResolutionCurrent(session: ConflictResolutionSession): boolean {
     return session.revision === this.revision &&
-      this.state.workingDirectory[session.path] === session.content && session.content.includes('<<<<<<<');
+      isUnmerged(this.state, session.path) && this.state.workingDirectory[session.path] === session.content && session.content.includes('<<<<<<<');
   }
 
   public resolveConflict(session: ConflictResolutionSession, content: string): CommandResult {
@@ -186,6 +187,7 @@ export class GitEngine {
       case 'init':
         return this.init();
       case 'clone': {
+        if (args.length !== 1) return { success: false, message: 'このアプリでは git clone <模擬URL> を指定してください。保存先や追加引数には未対応です。' };
         const name = Object.keys(this.state.remotes).find(remote => this.state.remotes[remote] === args[0]);
         const server = name ? this.state.mockServers[name] : undefined;
         if (!server?.branches.main) return { success: false, message: '模擬環境に登録されたURLを指定してください。' };
@@ -212,6 +214,7 @@ export class GitEngine {
       case 'show':
         return this.show(args);
       case 'reflog':
+        if (args.length) return { success: false, message: 'このアプリは引数なしのgit reflogに対応しています。' };
         return { success: true, message: (this.state.reflog ?? []).map((entry, i) => `${entry.id} HEAD@{${i}}: ${entry.command}`).join('\n') };
       case 'tag':
         return this.tag(args);
@@ -264,20 +267,12 @@ export class GitEngine {
     let mode: 'soft' | 'mixed' | 'hard' = 'mixed';
     let target = 'HEAD';
 
-    // 引数のパース
-    if (args.length > 0) {
-      if (args[0].startsWith('--')) {
-        const m = args[0].replace('--', '');
-        if (m === 'soft' || m === 'mixed' || m === 'hard') {
-          mode = m;
-          if (args.length > 1) target = args[1];
-        } else {
-          return { success: false, message: `git reset: unknown option ${args[0]}` };
-        }
-      } else {
-        target = args[0];
-      }
-    }
+    const modes = args.filter(arg => ['--soft', '--mixed', '--hard'].includes(arg));
+    const targets = args.filter(arg => !['--soft', '--mixed', '--hard'].includes(arg));
+    if (modes.length > 1 || targets.length > 1 || targets.some(arg => arg.startsWith('-'))) return { success: false, message: 'このアプリでは git reset [--soft|--mixed|--hard] [一つのコミット] を使ってください。ファイルのstage解除には git restore --staged <ファイル> を使います。' };
+    mode = modes[0] === '--soft' ? 'soft' : modes[0] === '--hard' ? 'hard' : 'mixed';
+    target = targets[0] ?? 'HEAD';
+    if (mode === 'soft' && hasUnmergedPaths(this.state)) return { success: false, message: '競合中のsoft resetはできません。競合を解消するか、操作案内の中断方法を使ってください。' };
 
     const commitId = resolveRevision(this.state, target);
     if (!commitId) return { success: false, message: `Commit ${target} not found` };
@@ -310,8 +305,12 @@ export class GitEngine {
     } else if (mode === 'hard') {
       // Hard reset: HEAD移動、インデックスとWDもHEADに合わせてリセット。
       this.state.index = dictionary();
-      const untracked = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => originalIndex[path] === undefined && targetCommit.tree[path] === undefined));
+      const untracked = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => originalIndex[path] === undefined && targetCommit.tree[path] === undefined && !isUnmerged(this.state, path)));
       this.state.workingDirectory = { ...targetCommit.tree, ...untracked };
+    }
+    if (mode !== 'soft') {
+      clearUnmergedPaths(this.state);
+      delete this.state.pendingMerge;
     }
 
     return { success: true, message: `HEAD is now at ${commitId.substring(0,7)} ${targetCommit.message}`, newState: this.state };
@@ -322,11 +321,28 @@ export class GitEngine {
    * Supports push, pop, apply, list.
    */
   private stash(args: string[]): CommandResult {
-    const action = args[0] ?? 'push';
+    const explicitAction = args[0] && !args[0].startsWith('-');
+    const action = explicitAction ? args[0] : 'push';
+    const rest = explicitAction ? args.slice(1) : args;
+    const flags = new Set<string>();
+    const targets: string[] = [];
+    let message: string | undefined;
+    for (let i = 0; i < rest.length; i++) {
+      const arg = rest[i];
+      if (arg === '-m') message = rest[++i];
+      else if (['-u', '--include-untracked', '--index'].includes(arg)) flags.add(arg);
+      else targets.push(arg);
+    }
+    const usage = 'このアプリのstash: [push [-u] [-m "説明"]] / save [説明] / list / show|drop [stash@{番号}] / apply|pop [--index] [stash@{番号}]。未対応のパスや余分な引数は実行しません。';
+    if (!['push', 'save', 'list', 'show', 'drop', 'apply', 'pop'].includes(action)) return { success: false, message: usage };
+    if (action === 'push' || action === 'save') {
+      if ((action === 'push' && targets.length) || flags.has('--index') || targets.some(arg => arg.startsWith('-'))) return { success: false, message: usage };
+      if (hasUnmergedPaths(this.state)) return { success: false, message: 'stashする前に競合を解消してstageしてください。' };
+    } else if ((action === 'list' && targets.length) || targets.length > 1 || message !== undefined || [...flags].some(flag => flag !== '--index' || !['apply', 'pop'].includes(action))) return { success: false, message: usage };
     const head = headTree(this.state);
     if (action === 'push' || action === 'save') {
       if (this.state.pendingMerge) return { success: false, message: 'Resolve or abort the merge first.' };
-      const includeUntracked = args.includes('-u') || args.includes('--include-untracked');
+      const includeUntracked = flags.has('-u') || flags.has('--include-untracked');
       const effectiveIndex = indexTree(this.state);
       const tracked = new Set([...Object.keys(head), ...Object.keys(effectiveIndex)]);
       const hidden = Object.fromEntries(Object.entries(head).filter(([path]) => !inSparseScope(this.state, path)));
@@ -334,8 +350,7 @@ export class GitEngine {
       const saved = { ...hidden, ...Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => shouldSave(path))) };
       const changed = !sameTree(head, effectiveIndex) || !sameTree(head, saved);
       if (!changed) return { success: false, message: 'No local changes to save.' };
-      const at = args.indexOf('-m');
-      const message = at >= 0 ? args[at + 1] : action === 'save' ? args.slice(1).join(' ') : `WIP on ${this.state.HEAD.value}`;
+      message ??= action === 'save' ? targets.join(' ') : `WIP on ${this.state.HEAD.value}`;
       this.state.stash.push({ id: Math.random().toString(36).slice(2, 9), message: message || 'WIP', baseTree: { ...head }, index: cloneGitData(this.state.index), workingDirectory: saved, timestamp: Date.now() });
       const preserved = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => !shouldSave(path)));
       this.state.index = dictionary();
@@ -343,7 +358,8 @@ export class GitEngine {
       return { success: true, message: 'Saved changes.', newState: this.getState() };
     }
     if (action === 'list') return { success: true, message: [...this.state.stash].reverse().map((entry, i) => `stash@{${i}}: ${entry.message}`).join('\n') || 'stash list is empty' };
-    const reference = args.find(arg => arg.startsWith('stash@')) ?? 'stash@{0}';
+    const rawReference = targets[0] ?? 'stash@{0}';
+    const reference = /^\d+$/.test(rawReference) ? `stash@{${rawReference}}` : rawReference;
     const match = reference.match(/^stash@\{([0-9]+)\}$/);
     const index = match ? this.state.stash.length - 1 - Number(match[1]) : -1;
     const entry = this.state.stash[index];
@@ -364,14 +380,18 @@ export class GitEngine {
     const hidden = Object.fromEntries(Object.entries(head).filter(([path]) => !inSparseScope(this.state, path)));
     const merged = this.performThreeWayMerge(snapshot(original), snapshot({ ...hidden, ...this.state.workingDirectory }), snapshot(entry.workingDirectory));
     this.state.workingDirectory = merged.tree;
-    if (merged.hasConflict) return { success: false, message: 'Stash conflict: resolve the files; the stash has been kept.', newState: this.getState() };
-    this.state.index = args.includes('--index') ? cloneGitData(Object.fromEntries(Object.entries(entry.index).filter(([path, file]) => file.status === 'deleted' || file.content !== original[path]))) : dictionary();
+    if (merged.hasConflict) {
+      this.state.unmergedPaths = merged.conflictedPaths;
+      return { success: false, message: 'Stash conflict: resolve the files; the stash has been kept.', newState: this.getState() };
+    }
+    this.state.index = flags.has('--index') ? cloneGitData(Object.fromEntries(Object.entries(entry.index).filter(([path, file]) => file.status === 'deleted' || file.content !== original[path]))) : dictionary();
     if (action === 'pop') this.state.stash.splice(index, 1);
     return { success: true, message: 'Applied stash changes.', newState: this.getState() };
   }
 
   private remote(args: string[]): CommandResult {
     const [action, name, value] = args;
+    if ((action === '-v' && args.length !== 1) || (['add', 'set-url'].includes(action) && args.length !== 3) || (['remove', 'rm'].includes(action) && args.length !== 2)) return { success: false, message: '対応: git remote [-v] / add|set-url <名前> <URL> / remove <名前>。余分な引数は実行しません。' };
     if (!action || action === '-v') return { success: true, message: Object.entries(this.state.remotes).map(([name, url]) => `${name}\t${url} (fetch)\n${name}\t${url} (push)`).join('\n') };
     if (action === 'add') {
       if (!name || !value || this.state.remotes[name]) return { success: false, message: 'Specify a new remote name and URL.' };
@@ -390,6 +410,7 @@ export class GitEngine {
   }
 
   private push(args: string[]): CommandResult {
+    if (args.filter(arg => !arg.startsWith('-')).length > 2 || args.includes('--') || (args.includes('--delete') && args.includes('--tags'))) return { success: false, message: 'このアプリは git push [対応オプション] [接続先] [一つのブランチまたはタグ] に対応しています。複数の対象や削除と全タグ送信の併用は実行しません。' };
     const setUpstream = args.includes('-u') || args.includes('--set-upstream');
     const force = args.includes('--force');
     const lease = args.includes('--force-with-lease');
@@ -428,6 +449,7 @@ export class GitEngine {
   }
 
   private fetch(args: string[]): CommandResult {
+    if (args.filter(arg => arg !== '--prune').length > 1 || args.includes('--')) return { success: false, message: 'このアプリは git fetch [--prune] [一つの接続先] に対応しています。refspecや追加引数は実行しません。' };
     const remoteName = args.find(arg => !arg.startsWith('-')) ?? 'origin';
     const server = this.state.mockServers[remoteName];
     if (!server || !this.state.remotes[remoteName]) return { success: false, message: `Unknown remote: ${remoteName}` };
@@ -449,6 +471,7 @@ export class GitEngine {
   }
 
   private pull(args: string[]): CommandResult {
+    if (args.filter(arg => !arg.startsWith('-')).length > 2 || args.includes('--') || (args.includes('--rebase') && args.includes('--ff-only'))) return { success: false, message: 'このアプリは git pull [--rebase または --ff-only] [接続先] [一つのブランチ] に対応しています。追加引数は実行しません。' };
     if (this.state.HEAD.type !== 'branch') return { success: false, message: 'Switch to a branch first.' };
     if (!cleanTrackedFiles(this.state)) return { success: false, message: 'Commit or stash local changes before pulling.' };
     const branch = this.state.HEAD.value;
@@ -467,6 +490,8 @@ export class GitEngine {
   }
 
   private merge(args: string[]): CommandResult {
+    const targets = args.filter(arg => !['--abort', '--no-ff', '--ff-only'].includes(arg));
+    if ((args.includes('--abort') && args.length !== 1) || targets.length > 1 || targets.some(arg => arg.startsWith('-')) || (args.includes('--no-ff') && args.includes('--ff-only'))) return { success: false, message: 'このアプリは git merge [--no-ff|--ff-only] <一つのブランチ> または git merge --abort に対応しています。余分な引数は実行しません。' };
     if (args[0] === '--abort') {
       const pending = this.state.pendingMerge;
       if (!pending) return { success: false, message: 'No merge in progress.' };
@@ -476,9 +501,10 @@ export class GitEngine {
       this.state.workingDirectory = { ...pending.workingDirectory, ...untracked };
       this.state.index = pending.index;
       delete this.state.pendingMerge;
+      clearUnmergedPaths(this.state);
       return { success: true, message: 'Merge aborted.', newState: this.getState() };
     }
-    if (this.state.pendingMerge || this.state.operation) return { success: false, message: 'Complete or abort the current operation first.' };
+    if (this.state.pendingMerge || this.state.operation || hasUnmergedPaths(this.state)) return { success: false, message: 'Complete or abort the current operation first.' };
     if (!cleanTrackedFiles(this.state)) return { success: false, message: 'Commit or stash local changes before merging.' };
     if (args.length === 0) {
       return { success: false, message: 'fatal: No branch specified' };
@@ -539,6 +565,7 @@ export class GitEngine {
     ]);
 
     let hasConflict = false;
+    const conflictedPaths: string[] = [];
     const newIndex = dictionary<FileChange>();
     const newWD = dictionary<string>();
 
@@ -568,6 +595,7 @@ export class GitEngine {
       } else {
         // コンフリクト検出（両側で異なる変更）
         hasConflict = true;
+        conflictedPaths.push(file);
         const conflictContent = `<<<<<<< HEAD\n${currentContent || ''}\n=======\n${targetContent || ''}\n>>>>>>> ${targetBranchName}`;
         newWD[file] = conflictContent;
         // コンフリクト時、ファイルはWDで更新されるがステージされない
@@ -584,6 +612,7 @@ export class GitEngine {
     
     if (hasConflict) {
       this.state.pendingMerge = beforeMerge;
+      this.state.unmergedPaths = conflictedPaths;
       this.state.index = newIndex; // コンフリクトしていないファイルをステージ
       return { success: false, message: 'Automatic merge failed; fix conflicts and then commit the result.', newState: this.state };
     } else {
@@ -657,14 +686,27 @@ export class GitEngine {
   }
 
   private add(args: string[]): CommandResult {
-    if (args.includes('-p') || args.includes('--patch')) return this.startPatch(args.filter(arg => !arg.startsWith('-'))[0]);
+    const targets: string[] = [];
+    const flags = new Set<string>();
+    let literal = false;
+    for (const arg of args) {
+      if (!literal && arg === '--') literal = true;
+      else if (!literal && ['-A', '-f', '-p', '--patch'].includes(arg)) flags.add(arg);
+      else targets.push(arg);
+    }
+    if (flags.has('-p') || flags.has('--patch')) {
+      if (targets.length > 1 || flags.has('-A') || flags.has('-f')) return { success: false, message: 'このアプリの部分stageは git add -p [一つのファイル] に対応しています。' };
+      return this.startPatch(targets[0]);
+    }
     if (!args.length) return { success: false, message: 'Nothing specified, nothing added.' };
     const head = headTree(this.state);
-    const paths = args.includes('.') || args.includes('-A')
+    const all = targets.includes('.') || (flags.has('-A') && !targets.length);
+    const paths = all
       ? [...new Set([...Object.keys(head), ...Object.keys(this.state.workingDirectory), ...Object.keys(this.state.index)])]
-      : args.filter(arg => arg !== '-f');
-    const visiblePaths = paths.filter(path => inSparseScope(this.state, path) && (args.includes('-f') || !isIgnored(this.state, path)));
-    if (!args.includes('.') && !args.includes('-A') && visiblePaths.length !== paths.length) return { success: false, message: 'Ignored or excluded file. Use git add -f for ignored files, or expand sparse-checkout.' };
+      : targets;
+    if (!all && !paths.length) return { success: false, message: 'git addでstageするファイルか、-Aを指定してください。' };
+    const visiblePaths = paths.filter(path => inSparseScope(this.state, path) && (flags.has('-f') || !isIgnored(this.state, path)));
+    if (!all && visiblePaths.length !== paths.length) return { success: false, message: 'Ignored or excluded file. Use git add -f for ignored files, or expand sparse-checkout.' };
     if (paths.some(path => this.state.workingDirectory[path] === undefined && head[path] === undefined && !this.state.index[path])) {
       return { success: false, message: 'pathspec did not match any files' };
     }
@@ -674,6 +716,9 @@ export class GitEngine {
         ? { path, status: 'deleted' }
         : { path, status: content === head[path] ? 'unmodified' : 'staged', content };
     }
+    // Like Git, staging records the user's choice, even when marker text remains.
+    // Lesson content requirements decide whether that choice is a correct resolution.
+    clearUnmergedPaths(this.state, new Set(visiblePaths));
     return { success: true, message: '', newState: this.getState() };
   }
 
@@ -703,12 +748,12 @@ export class GitEngine {
     if (!message) return { success: false, message: 'Specify a message using -m, or --amend --no-edit.' };
     if (amend && !previous) return { success: false, message: 'No commit to amend.' };
     const newTree = indexTree(this.state);
-    if (this.state.pendingMerge && (Object.values(this.state.workingDirectory).some(content => content.includes('<<<<<<< HEAD')) ||
+    if (hasUnmergedPaths(this.state)) return { success: false, message: '競合ファイルを解消してgit addでstageしてください。git statusで未解消パスを確認できます。' };
+    if (this.state.pendingMerge && (
       [...new Set([...Object.keys(newTree), ...Object.keys(headTree(this.state))])].filter(path => inSparseScope(this.state, path)).some(path => newTree[path] !== this.state.workingDirectory[path]))) {
       return { success: false, message: 'Resolve and stage all merge changes first.' };
     }
     if (!amend && !this.state.pendingMerge && sameTree(newTree, headTree(this.state))) return { success: false, message: 'nothing to commit' };
-    if (Object.values(newTree).some(content => content.includes('<<<<<<< HEAD'))) return { success: false, message: 'Resolve and stage all conflicts first.' };
     const commitId = Math.random().toString(36).substring(2, 9);
     this.state.commits[commitId] = {
       id: commitId, message,
@@ -731,16 +776,18 @@ export class GitEngine {
       ]);
     }
     const files = fileStates(this.state);
-    const staged = files.filter(file => file.staged);
-    const modified = files.filter(file => file.unstaged);
-    const untracked = files.filter(file => file.untracked);
+    const conflicts = files.filter(file => file.conflict);
+    const staged = files.filter(file => file.staged && !file.conflict);
+    const modified = files.filter(file => file.unstaged && !file.conflict);
+    const untracked = files.filter(file => file.untracked && !file.conflict);
     const ignored = files.filter(file => file.ignored);
     const lines = [this.state.HEAD.type === 'branch' ? `On branch ${this.state.HEAD.value}` : `HEAD detached at ${this.state.HEAD.value}`];
+    if (conflicts.length) lines.push('Unmerged paths:', ...conflicts.map(file => `  unmerged: ${file.path}`));
     if (staged.length) lines.push('Changes to be committed:', ...staged.map(file => `  ${file.staged === 'deleted' ? 'deleted' : 'staged'}: ${file.path}`));
     if (modified.length) lines.push('Changes not staged for commit:', ...modified.map(file => `  ${file.unstaged === 'deleted' ? 'deleted' : 'modified'}: ${file.path}`));
     if (untracked.length) lines.push('Untracked files:', ...untracked.map(file => `  ${file.path}`));
     if (args.includes('--ignored') && ignored.length) lines.push('Ignored files:', ...ignored.map(file => `  ${file.path}`));
-    if (!staged.length && !modified.length && !untracked.length) lines.push('nothing to commit, working tree clean');
+    if (!staged.length && !modified.length && !untracked.length && !conflicts.length) lines.push('nothing to commit, working tree clean');
     return { success: true, message: lines.join('\n') };
   }
 
@@ -794,6 +841,7 @@ export class GitEngine {
 
   private configure(args: string[]): CommandResult {
     const values = args.filter(arg => !['--global', '--local'].includes(arg));
+    if (values.length > 2 || (values[0] === '--list' && values.length !== 1) || args.includes('--')) return { success: false, message: 'このアプリは git config [--local|--global] <キー> [一つの値] または --list に対応しています。空白を含む値は引用符で囲んでください。' };
     this.state.config ??= dictionary();
     if (values[0] === '--list') return { success: true, message: Object.entries(this.state.config).map(([key, value]) => `${key}=${value}`).join('\n') };
     const [key, value] = values;
@@ -806,19 +854,28 @@ export class GitEngine {
   private tag(args: string[]): CommandResult {
     this.state.tags ??= dictionary();
     if (!args.length) return { success: true, message: Object.keys(this.state.tags).sort().join('\n') };
-    if (args[0] === '-d') {
-      if (!this.state.tags[args[1]]) return { success: false, message: 'Tag not found.' };
-      delete this.state.tags[args[1]];
+    const targets: string[] = [];
+    let annotated = false;
+    let deleting = false;
+    let message: string | undefined;
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '-a') annotated = true;
+      else if (args[i] === '-d') deleting = true;
+      else if (args[i] === '-m') { message = args[++i]; annotated = true; }
+      else if (args[i].startsWith('-')) return { success: false, message: 'このアプリのtagは一つの名前と開始コミット、-a/-m、または -d に対応しています。' };
+      else targets.push(args[i]);
+    }
+    if ((deleting && (annotated || targets.length !== 1)) || (!deleting && (targets.length < 1 || targets.length > 2))) return { success: false, message: 'このアプリは tag [-a] <一つの名前> [コミット] [-m "注釈"] または tag -d <一つの名前> に対応しています。' };
+    if (deleting) {
+      if (!this.state.tags[targets[0]]) return { success: false, message: 'Tag not found.' };
+      delete this.state.tags[targets[0]];
       return { success: true, message: 'Deleted tag.', newState: this.getState() };
     }
-    const annotated = args[0] === '-a';
-    const name = annotated ? args[1] : args[0];
-    const messageAt = args.indexOf('-m');
-    const target = args[annotated ? 2 : 1];
-    const id = resolveRevision(this.state, target && !target.startsWith('-') ? target : 'HEAD');
+    const name = targets[0];
+    const id = resolveRevision(this.state, targets[1] ?? 'HEAD');
     if (!name || !id || this.state.tags[name]) return { success: false, message: 'Specify a new tag and a valid commit.' };
-    if (annotated && (messageAt < 0 || !args[messageAt + 1])) return { success: false, message: 'Annotated tags require -m.' };
-    this.state.tags[name] = { commitId: id, ...(annotated ? { message: args[messageAt + 1] } : {}) };
+    if (annotated && !message) return { success: false, message: 'Annotated tags require -m.' };
+    this.state.tags[name] = { commitId: id, ...(annotated ? { message } : {}) };
     return { success: true, message: '', newState: this.getState() };
   }
 
@@ -860,6 +917,7 @@ export class GitEngine {
   }
 
   private branch(args: string[]): CommandResult {
+    if ((args[0] === '-a' && args.length !== 1) || (args[0] === '-m' && ![2, 3].includes(args.length)) || (['-d', '-D'].includes(args[0]) && args.length !== 2) || (!['-a', '-m', '-d', '-D'].includes(args[0]) && args.length > 2)) return { success: false, message: '対応: git branch [-a] / <名前> [開始コミット] / -m [旧名] <新名> / -d|-D <一つの名前>。余分な引数は実行しません。' };
     const current = this.state.HEAD.type === 'branch' ? this.state.HEAD.value : '';
     if (!args.length || args[0] === '-a') {
       const local = Object.keys(this.state.branches).map(name => `${name === current ? '* ' : '  '}${name}`);
@@ -929,6 +987,7 @@ export class GitEngine {
   }
 
   private checkout(args: string[]): CommandResult {
+    if ((args[0] === '-b' && ![2, 3].includes(args.length)) || (args[0] === '--detach' && args.length > 2) || (!['-b', '--detach'].includes(args[0]) && args.length > 1)) return { success: false, message: 'このアプリは checkout <参照> / -b <新規ブランチ> [開始コミット] / --detach [コミット] に対応しています。ファイルの復元はgit restoreを使ってください。' };
     if (args.length === 0) {
       return { success: false, message: 'checkout: missing argument' };
     }
@@ -945,7 +1004,7 @@ export class GitEngine {
       target = args[1];
     }
 
-    if (this.state.pendingMerge || this.state.operation) return { success: false, message: 'Complete or abort the current operation first.' };
+    if (this.state.pendingMerge || this.state.operation || hasUnmergedPaths(this.state)) return { success: false, message: 'Complete or abort the current operation first.' };
     if (createBranch && !target) return { success: false, message: 'Specify a branch name.' };
     if (createBranch) {
       const branchRes = this.branch([target, args[2] ?? 'HEAD']);
@@ -1039,7 +1098,7 @@ export class GitEngine {
     const index = indexTree(this.state);
     path ??= Object.keys(index).find(file => inSparseScope(this.state, file) && index[file] !== this.state.workingDirectory[file]);
     if (!path || index[path] === undefined || this.state.workingDirectory[path] === undefined) return { success: false, message: '変更した追跡ファイルを一つ指定してください。' };
-    if (this.state.workingDirectory[path].includes('<<<<<<< HEAD')) return { success: false, message: '先に競合マーカーを解消してください。' };
+    if (isUnmerged(this.state, path)) return { success: false, message: '先に競合を解消し、git addでstageしてください。' };
     const chunks: NonNullable<GitState['patchSession']>['chunks'] = [];
     for (const part of diffLines(index[path], this.state.workingDirectory[path])) {
       if (!part.added && !part.removed) chunks.push({ before: part.value, after: part.value, changed: false });
@@ -1069,6 +1128,7 @@ export class GitEngine {
   }
 
   private blame(args: string[]): CommandResult {
+    if (args.filter(arg => arg !== '--').length !== 1) return { success: false, message: 'このアプリは git blame [--] <一つの追跡ファイル> に対応しています。' };
     const path = args.filter(arg => arg !== '--').at(-1);
     if (!path || headTree(this.state)[path] === undefined) return { success: false, message: '追跡されているファイルを指定してください。' };
     const history: Commit[] = [];
@@ -1106,6 +1166,7 @@ export class GitEngine {
     if (sourceAt < 0) paths = args.filter(arg => !arg.startsWith('-'));
     if (paths.includes('.')) paths = [...new Set([...Object.keys(source), ...Object.keys(head), ...Object.keys(this.state.index)])];
     if (!paths.length || paths.some(path => source[path] === undefined && head[path] === undefined && !this.state.index[path])) return { success: false, message: 'restore: specify tracked files' };
+    if (paths.some(path => isUnmerged(this.state, path))) return { success: false, message: '未解消パスは内容を選んでgit addでstageしてください。操作全体を中断する場合は操作案内を使ってください。' };
     for (const path of paths) {
       if (staged) {
         if (source[path] === head[path]) delete this.state.index[path];
@@ -1121,9 +1182,11 @@ export class GitEngine {
 
   private fileOperation(command: string, args: string[]): CommandResult {
     if (command === 'rm') return this.removeFile(args);
+    if (args.length !== 2) return { success: false, message: 'このアプリは git mv <一つのファイル> <新しい名前> に対応しています。' };
     const cached = command === 'rm' && args.includes('--cached');
     const [path, destination] = args.filter(arg => arg !== '--cached');
     const tracked = indexTree(this.state)[path];
+    if (isUnmerged(this.state, path)) return { success: false, message: '移動する前に競合を解消してstageしてください。' };
     if (tracked === undefined) return { success: false, message: 'Specify a tracked file.' };
     if (!cached && this.state.workingDirectory[path] !== tracked) return { success: false, message: 'File has local changes; stage or restore them first.' };
     if (command === 'mv' && (!destination || this.state.workingDirectory[destination] !== undefined)) return { success: false, message: 'Specify a new destination.' };
@@ -1150,6 +1213,7 @@ export class GitEngine {
     }
     if (paths.length !== 1) return { success: false, message: 'このアプリでは git rm [--cached] [-f|--force] [--] <file> で一つのファイルを指定してください。' };
     const path = paths[0];
+    if (isUnmerged(this.state, path) && !force) return { success: false, message: '未解消パスの削除で解決する場合は git rm -f <ファイル> を使います。内容を確認してから実行してください。' };
     const indexed = indexTree(this.state)[path];
     if (indexed === undefined) return { success: false, message: 'Specify a tracked file.' };
     if (!inSparseScope(this.state, path)) return { success: false, message: '先にsparse-checkoutの対象を広げてください。' };
@@ -1166,6 +1230,7 @@ export class GitEngine {
     }
     if (!cached) delete this.state.workingDirectory[path];
     this.state.index[path] = { path, status: 'deleted' };
+    clearUnmergedPaths(this.state, new Set([path]));
     return { success: true, message: '', newState: this.getState() };
   }
 
@@ -1192,6 +1257,8 @@ export class GitEngine {
   }
 
   private replayOperation(kind: 'rebase' | 'cherry-pick' | 'revert', args: string[]): CommandResult {
+    if (args.some(arg => ['--continue', '--abort', '--skip'].includes(arg)) && args.length !== 1) return { success: false, message: `git ${kind} の続行・中断・skipには追加引数を指定しないでください。` };
+    if (kind === 'rebase' && args.filter(arg => !['-i', '--interactive', '--continue', '--abort', '--skip'].includes(arg)).length > 1) return { success: false, message: 'このアプリのrebaseは一つの載せ替え先に対応しています。追加のブランチ指定や--ontoには未対応です。' };
     const pending = this.state.operation;
     if (args[0] === '--abort') {
       if (!pending || pending.kind !== kind) return { success: false, message: 'No matching operation in progress.' };
@@ -1230,19 +1297,20 @@ export class GitEngine {
       }
       if (args[0] === '--continue') {
         const tree = indexTree(this.state);
-        if (Object.values(this.state.workingDirectory).some(content => content.includes('<<<<<<< HEAD')) ||
+        if (hasUnmergedPaths(this.state) ||
           [...new Set([...Object.keys(tree), ...Object.keys(headTree(this.state))])].filter(path => inSparseScope(this.state, path)).some(path => tree[path] !== this.state.workingDirectory[path])) return { success: false, message: 'Resolve and stage all changes first.' };
         const result = this.commit([...(pending.current.amend ? ['--amend'] : []), '-m', pending.current.message]);
         if (!result.success) return result;
       } else {
         this.state.workingDirectory = { ...headTree(this.state), ...this.replayUntrackedFiles() };
         this.state.index = dictionary();
+        clearUnmergedPaths(this.state);
       }
       pending.remaining.shift();
       delete pending.current;
       return this.runReplay();
     }
-    if (pending || this.state.pendingMerge) return { success: false, message: 'Complete or abort the current operation first.' };
+    if (pending || this.state.pendingMerge || hasUnmergedPaths(this.state)) return { success: false, message: 'Complete or abort the current operation first.' };
     if (!cleanTrackedFiles(this.state)) return { success: false, message: 'Commit or stash local changes first.' };
     const interactive = kind === 'rebase' && (args.includes('-i') || args.includes('--interactive'));
     const targets = args.filter(arg => !['-i', '--interactive'].includes(arg));
@@ -1299,10 +1367,12 @@ export class GitEngine {
       const amend = action === 'squash' || action === 'fixup';
       const message = operation.kind === 'revert' ? `Revert "${source.message}"` : action === 'fixup' ? ours.message : action === 'squash' ? `${ours.message}\n\n${source.message}` : source.message;
       this.state.workingDirectory = { ...result.tree, ...untracked };
+      if (result.conflictedPaths.length) this.state.unmergedPaths = result.conflictedPaths;
+      else clearUnmergedPaths(this.state);
       this.state.index = dictionary();
       for (const path of new Set([...Object.keys(ours.tree), ...Object.keys(result.tree)])) {
         const content = result.tree[path];
-        if (content?.includes('<<<<<<< HEAD')) continue;
+        if (isUnmerged(this.state, path)) continue;
         this.state.index[path] = content === undefined ? { path, status: 'deleted' } : { path, status: 'staged', content };
       }
       if (result.hasConflict) {
@@ -1326,7 +1396,7 @@ export class GitEngine {
     return { success: true, message: kind === 'rebase' ? 'Successfully rebased.' : `Completed ${kind}: ${this.state.commits[this.resolveHeadCommitId()!]?.message}`, newState: this.getState() };
   }
 
-  private performThreeWayMerge(base: Commit, ours: Commit, theirs: Commit): { tree: Record<string, string>, hasConflict: boolean } {
+  private performThreeWayMerge(base: Commit, ours: Commit, theirs: Commit): { tree: Record<string, string>, hasConflict: boolean, conflictedPaths: string[] } {
     const allFiles = new Set([
       ...Object.keys(base.tree),
       ...Object.keys(ours.tree),
@@ -1335,6 +1405,7 @@ export class GitEngine {
 
     const newTree = dictionary<string>();
     let hasConflict = false;
+    const conflictedPaths: string[] = [];
 
     for (const file of allFiles) {
       const baseContent = base.tree[file];
@@ -1351,10 +1422,11 @@ export class GitEngine {
         if (oursContent !== undefined) newTree[file] = oursContent;
       } else {
         hasConflict = true;
+        conflictedPaths.push(file);
         // Simplified conflict content
         newTree[file] = `<<<<<<< HEAD\n${oursContent || ''}\n=======\n${theirsContent || ''}\n>>>>>>> ${theirs.id.substring(0,7)}`;
       }
     }
-    return { tree: newTree, hasConflict };
+    return { tree: newTree, hasConflict, conflictedPaths };
   }
 }

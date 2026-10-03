@@ -15,7 +15,10 @@ export function advancedCommand(state: GitState, command: string, args: string[]
   const success = (message: string): CommandResult => ({ success: true, message, newState: cloneGitData(state) });
   const fail = (message: string): CommandResult => ({ success: false, message });
   if (command === 'worktree' || command === 'cd') {
-    if (state.operation || state.pendingMerge || state.bisect) return fail('現在の履歴操作を完了・中断してから作業場所を変更してください。');
+    const branchAt = args.indexOf('-b');
+    const positional = args.filter((_, index) => branchAt < 0 || (index !== branchAt && index !== branchAt + 1));
+    if (command === 'cd' ? args.length !== 1 : (args[0] === 'list' && args.length !== 1) || (args[0] === 'remove' && args.length !== 2) || (args[0] === 'add' && (positional.length < 2 || positional.length > 3 || args.filter(arg => arg === '-b').length > 1))) return fail('対応: cd <一つの仮想パス> / worktree list / remove <パス> / add [-b <新規ブランチ>] <パス> [開始位置]。余分な引数は実行しません。');
+    if (state.operation || state.pendingMerge || state.bisect || state.unmergedPaths?.length) return fail('現在の履歴操作や競合を完了・中断してから作業場所を変更してください。');
     if (state.HEAD.type !== 'branch') return fail('ブランチ上でworktree操作を始めてください。');
     const active = state.activeWorktree ?? '/workspace/project';
     state.worktrees ??= dictionary();
@@ -54,6 +57,7 @@ export function advancedCommand(state: GitState, command: string, args: string[]
     return success(`仮想worktree ${path} を作成しました。cd ${path} で移動できます。`);
   }
   if (command === 'bisect') {
+    if ((['start', 'reset'].includes(args[0]) && args.length !== 1) || (['good', 'bad'].includes(args[0]) && ![1, 2].includes(args.length))) return fail('対応: bisect start / reset / good|bad [一つのコミット]。追加引数は実行しません。');
     if (args[0] === 'start') {
       if (state.bisect || state.operation || state.pendingMerge || !cleanTrackedFiles(state)) return fail('変更を保存し、進行中の操作を終了してください。');
       state.bisect = { original: cloneGitData(state) };
@@ -96,6 +100,7 @@ export function advancedCommand(state: GitState, command: string, args: string[]
     return success(bisect.found ? `${candidate} is the first bad commit` : `候補 ${candidate} を検証してgoodまたはbadを指定してください。`);
   }
   if (command === 'sparse-checkout') {
+    if ((['list', 'disable'].includes(args[0]) && args.length !== 1) || (args[0] === 'init' && (args.length > 2 || (args.length === 2 && args[1] !== '--cone'))) || (args[0] === 'set' && args.slice(1).some(arg => arg.startsWith('-')))) return fail('対応: sparse-checkout init [--cone] / list / disable / set <ディレクトリ...>。未対応の追加引数は実行しません。');
     if (!cleanTrackedFiles(state)) return fail('変更を保存してから対象範囲を変更してください。');
     if (args[0] === 'list') return success(state.sparseCheckout?.join('\n') ?? 'sparse-checkoutは無効です。');
     const untracked = untrackedFiles(state);
@@ -107,6 +112,7 @@ export function advancedCommand(state: GitState, command: string, args: string[]
     return success('指定したディレクトリとルートのファイルを展開しました。');
   }
   if (command === 'submodule') {
+    if ((args[0] === 'status' && args.length !== 1) || (args[0] === 'add' && args.length !== 3)) return fail('対応: submodule status / add <模擬URL> <パス> / update [--init|--remote] [パス...]。追加引数は実行しません。');
     state.submodules ??= dictionary();
     if (args[0] === 'status') return success(Object.entries(state.submodules).map(([path, module]) => `${module.initialized ? indexTree(state)[path] === `Subproject commit ${module.commitId}` ? ' ' : '+' : '-'}${module.commitId} ${path}`).join('\n'));
     if (args[0] === 'add') {
@@ -123,6 +129,7 @@ export function advancedCommand(state: GitState, command: string, args: string[]
     }
     if (args[0] !== 'update') return fail('submodule add/status/update に対応しています。');
     const paths = args.slice(1).filter(arg => !arg.startsWith('-'));
+    if (paths.some(path => !Object.hasOwn(state.submodules!, path))) return fail('登録済みのsubmoduleパスを指定してください。');
     for (const [path, module] of Object.entries(state.submodules)) {
       if (paths.length && !paths.includes(path)) continue;
       const remote = Object.keys(state.remotes).find(name => state.remotes[name] === module.url);
@@ -135,6 +142,7 @@ export function advancedCommand(state: GitState, command: string, args: string[]
     return success('仮想submoduleを取得しました。--remoteの更新は親リポジトリでadd・commitして記録してください。');
   }
   if (command === 'lfs') {
+    if ((args[0] === 'install' && args.length !== 1) || (args[0] === 'track' && ![1, 2].includes(args.length))) return fail('この模擬LFSは install / track [一つのパターン] に対応しています。追加引数は実行しません。');
     state.lfs ??= { installed: false, patterns: [] };
     if (args[0] === 'install') { state.lfs.installed = true; return success('模擬LFSの設定を有効にしました。実際のGit LFSのインストールや転送は行いません。'); }
     if (!state.lfs.installed) return fail('先にgit lfs installを実行してください。');
