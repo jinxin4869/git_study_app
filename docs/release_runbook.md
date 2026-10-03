@@ -5,7 +5,7 @@
 ## PRから公開まで
 
 1. 最新mainから作業し、PRの目的・見える挙動・テスト・保存互換性・未検証範囲を記録する。
-2. `npm ci`、lint、typecheck、unit、本番build、Playwright 6構成を確認する。CIは標準のOS依存付きChromium/Firefox/WebKitを使う。再試行でのみ通った経路はログから確認する。
+2. `npm ci`、lint、typecheck、unit、本番build、Playwright 6構成を確認する。CIはUbuntu 24.04の標準OS依存付きChromium/Firefox/WebKitを使う。再試行でのみ通った経路はログから確認する。
 3. VercelのPR Previewのビルド状態と対象SHAを確認する。SSO等で画面を開けない場合、成功したビルドだけで画面確認済みとはしない。アクセス可能な担当者が主要経路を確認する。
 4. レビュー後、所有者がmainへマージする。作業エージェントはmainへ直接push、マージ、手動デプロイをしない。
 5. main連携によるProduction deploymentがReadyになったら、対象SHA・URL・日時・CI run URLを記録する。保護されたdeployment固有URLと公開aliasは別に確認する。
@@ -45,3 +45,5 @@ PRODUCTION_BASE_URL=https://git-study-app.vercel.app npm run test:e2e:production
 Dependabotはnpm/GitHub Actionsの更新を月次で通知する。npmのminor/patchをまとめ、majorは互換性を別にレビューする。PRごとに通常チェックをすべて実行する。Actionsの実行用NodeとアプリのNode 22は別である。
 
 月次と依存更新時に `npm audit` と `npm audit --omit=dev`、eslint pluginのpeerDependencies、Actions告知を確認する。未修正bracesのHigh 5経路は、件数を減らすためのダウングレードや検査の無効化で隠さない。詳細は [依存更新記録](dependency_security_updates.md)。通常の公開smokeは明示実行とし、外部学習ログ収集・有料監視サービスを導入しない。
+
+CIのOSメジャーは `ubuntu-24.04` として固定し、runnerのパッチイメージは通常更新される。ubuntu-latestのOSメジャー移行でWebKitのOS依存が変わることを避け、OS更新は公式runner/Playwright対応と6構成テストを確認して別PRで行う。

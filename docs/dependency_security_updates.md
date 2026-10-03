@@ -93,4 +93,6 @@ CI=1 npm run test:e2e -- --workers=2 --retries=0
 
 アクセシビリティE2Eの実行依存を明確にするため、既にlockfileに存在するaxe-core 4.11.0を直接devDependencyにも指定した。依存バージョン変更はなく、npm 10の再生成で省かれたplatform libcメタデータを保持した。
 
-CIは [checkout](https://github.com/actions/checkout)、[setup-node](https://github.com/actions/setup-node)、[upload-artifact](https://github.com/actions/upload-artifact) をv7へ更新した。公式のNode 24実行ランタイムとubuntu-latestでの互換性を確認し、アプリ用Node 22の指定は維持する。最終的な実行結果は今回のPR checksと [改善記録](learning_refinements.md) に記録する。月次Dependabotと手動監査の手順を [runbook](release_runbook.md) に設定し、検査の無効化やaudit --forceは行わない。
+CIは [checkout](https://github.com/actions/checkout)、[setup-node](https://github.com/actions/setup-node)、[upload-artifact](https://github.com/actions/upload-artifact) をv7へ更新した。公式のNode 24実行ランタイムとUbuntu 24.04での互換性を確認し、アプリ用Node 22の指定は維持する。最終的な実行結果は今回のPR checksと [改善記録](learning_refinements.md) に記録する。月次Dependabotと手動監査の手順を [runbook](release_runbook.md) に設定し、検査の無効化やaudit --forceは行わない。
+
+CI run [37104472184](https://github.com/jinxin4869/git_study_app/actions/runs/37104472184) はSHA `107e773` で全チェック成功（unit565、E2E252、再試行なし）。ActionsのNode 20非推奨警告は解消し、ESLint 9のdeprecated警告は上記peer制約で残る。ubuntu-latestのUbuntu 26への自動切替予定も通知されたため、検証済みの `ubuntu-24.04` をCIに明示指定した。[公式の移行告知](https://github.com/actions/runner-images/issues/14748) と新しいPlaywrightの対応OSを確認してから、別途OS版を更新する。固定ラベルのOS更新は通常のrunnerイメージ更新を受ける。最終SHAの実行はPR checksを参照する。

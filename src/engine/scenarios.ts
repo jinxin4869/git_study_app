@@ -161,7 +161,7 @@ export const scenarios: Scenario[] = [
   {
     id: 'level-1-7',
     title: 'Level 1-7: ファイルの変更',
-    description: '既存のファイルを変更してみましょう。`README.md` をHello Gitに書き換えます。',
+    description: '既存のファイルを変更してみましょう。`README.md` の内容を上書きします（例: Hello Git）。',
     difficulty: 'beginner',
     initialState: {
       commits: {

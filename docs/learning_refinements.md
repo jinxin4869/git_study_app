@@ -103,3 +103,11 @@ Ubuntu環境から実機IME・実ソフトキーボード・実読み上げ・�
 - 見送り 3件: P08、O08、O09
 
 見送り3 IDとIDなし候補は現在の用途による判断であり、永久に不要とはしない。途中状態保存/入出力/比較・自由編集/追加実務課題/大規模分割/未実測最適化は、利用上の具体的な必要性と前提が整った時に再検討する。実機確認と未修正版警告は未完了として上記に残す。
+
+## クラウドの確認と最終調整
+
+SHA `107e773` の [CI run 37104472184](https://github.com/jinxin4869/git_study_app/actions/runs/37104472184) はlint/type/unit565/build/標準6構成E2E252とartifact保存まで成功、再試行なし。Actions v7は正常に実行し、ESLint 9の既知のdeprecatedとUbuntu 26へのlatestラベル移行予定が残った。CIのOSを検証済みUbuntu 24.04へ明示指定し、自動でOSメジャーが変わらないようにした。OS版更新は公式runner/Playwright対応を検証して行う。
+
+最終教材確認ではLevel 1-7のHello Gitを必須内容に見せず、上書き内容の例と明示した。この課題はREADME.mdの編集を採点し、特定の本文に限定していない。採点条件は変更せず説明を合わせた。
+
+Vercel Previewのビルドは成功した。認証なしのアクセスはHTTP 200で `vercel.com/login` へ転送されることを確認したため、Preview画面操作は未検証。保護を回避せず、ローカル本番ビルドと公開mainを別々に検証した。最終SHAのCI/Preview結果は [PR #6のchecks](https://github.com/jinxin4869/git_study_app/pull/6/checks) を参照する。
