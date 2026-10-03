@@ -7,12 +7,19 @@ import { advancedCommand } from './advanced-simulator';
 import { isIgnored } from './gitignore';
 import { diffLines } from 'diff';
 
+export interface ConflictResolutionSession {
+  path: string;
+  content: string;
+  revision: number;
+}
+
 /**
  * GitEngine class simulates the core behavior of Git.
  * It manages the repository state including commits, branches, index, working directory, and remotes.
  */
 export class GitEngine {
   private state: GitState;
+  private revision = 0;
 
   constructor(initialState?: GitState) {
     this.state = initialState ? JSON.parse(JSON.stringify(initialState)) : this.createInitialState();
@@ -48,10 +55,30 @@ export class GitEngine {
    */
   public loadState(newState: GitState) {
     this.state = JSON.parse(JSON.stringify(newState));
+    this.revision++;
+  }
+
+  public openConflictResolution(path: string): ConflictResolutionSession | null {
+    const content = this.state.workingDirectory[path];
+    return content?.includes('<<<<<<<') ? { path, content, revision: this.revision } : null;
+  }
+
+  public isConflictResolutionCurrent(session: ConflictResolutionSession): boolean {
+    return session.revision === this.revision &&
+      this.state.workingDirectory[session.path] === session.content && session.content.includes('<<<<<<<');
+  }
+
+  public resolveConflict(session: ConflictResolutionSession, content: string): CommandResult {
+    if (!this.isConflictResolutionCurrent(session)) {
+      return { success: false, message: '競合の状態が変わりました。ファイルを開き直して確認してください。' };
+    }
+    this.touch(session.path, content);
+    return { success: true, message: `Resolved conflict in ${session.path}`, newState: this.getState() };
   }
 
   public setRebaseTodo(todo: string): CommandResult {
     if (this.state.operation?.awaiting !== 'todo') return { success: false, message: 'No rebase todo editor is open.' };
+    if (this.state.operation.todo !== todo) this.revision++;
     this.state.operation.todo = todo;
     return { success: true, message: '', newState: this.getState() };
   }
@@ -62,6 +89,7 @@ export class GitEngine {
    */
   public execute(command: string): CommandResult {
     const previousState = this.getState();
+    const previousRevision = this.revision;
     const previousId = this.resolveHeadCommitId();
     const previousHead = { ...this.state.HEAD };
     const result = this.executeCommand(command);
@@ -76,6 +104,8 @@ export class GitEngine {
       this.state.workingDirectory = { ...sparseTree(this.state, this.state.workingDirectory), ...untracked };
       result.newState = this.getState();
     }
+    // Read-only and rejected commands retain decisions; any state change invalidates old drafts.
+    this.revision = previousRevision + (JSON.stringify(previousState) !== JSON.stringify(this.state) ? 1 : 0);
     return result;
   }
 
@@ -642,11 +672,28 @@ export class GitEngine {
   }
 
   private commit(args: string[]): CommandResult {
-    const msgIndex = args.indexOf('-m');
-    const amend = args.includes('--amend');
+    const messages: string[] = [];
+    let amend = false;
+    let noEdit = false;
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === '-m') {
+        if (args[i + 1] === undefined) return { success: false, message: 'git commit: -m requires a message.' };
+        messages.push(args[++i]);
+      } else if (arg === '--amend') amend = true;
+      else if (arg === '--no-edit') noEdit = true;
+      else {
+        return this.unsupportedArgument('commit', arg, '-m <message>, --amend, --no-edit (with --amend)', [
+          '-a', '--all', '--allow-empty', '--allow-empty-message', '--message', '-F', '--file',
+          '--author', '--date', '-s', '--signoff', '-S', '--gpg-sign', '-q', '--quiet', '-v', '--verbose',
+          '--dry-run', '--no-verify', '-n', '--only', '-o', '--include', '-i', '--fixup', '--squash', '--reset-author',
+        ]);
+      }
+    }
+    if (noEdit && !amend) return { success: false, message: 'このアプリでは --no-edit は --amend と併用してください。' };
     const parentId = this.resolveHeadCommitId();
     const previous = parentId ? this.state.commits[parentId] : undefined;
-    const message = msgIndex >= 0 ? args[msgIndex + 1] : amend && args.includes('--no-edit') ? previous?.message : undefined;
+    const message = messages.length ? messages.join('\n\n') : amend && noEdit ? previous?.message : undefined;
     if (!message) return { success: false, message: 'Specify a message using -m, or --amend --no-edit.' };
     if (amend && !previous) return { success: false, message: 'No commit to amend.' };
     const newTree = indexTree(this.state);
@@ -671,6 +718,12 @@ export class GitEngine {
   }
 
   private status(args: string[] = []): CommandResult {
+    for (const arg of args) {
+      if (arg !== '--ignored') return this.unsupportedArgument('status', arg, '--ignored', [
+        '-s', '--short', '-b', '--branch', '--porcelain', '-z', '--null', '-u', '--untracked-files',
+        '--show-stash', '--ignore-submodules', '--column', '--no-column', '--ahead-behind', '--no-ahead-behind', '--verbose', '-v',
+      ]);
+    }
     const head = headTree(this.state);
     const index = indexTree(this.state);
     const working = this.state.workingDirectory;
@@ -686,6 +739,13 @@ export class GitEngine {
     if (args.includes('--ignored') && ignored.length) lines.push('Ignored files:', ...ignored.map(path => `  ${path}`));
     if (!staged.length && !modified.length && !untracked.length) lines.push('nothing to commit, working tree clean');
     return { success: true, message: lines.join('\n') };
+  }
+
+  private unsupportedArgument(command: string, arg: string, supported: string, knownOptions: string[]): CommandResult {
+    const known = knownOptions.includes(arg.split('=')[0]) ||
+      knownOptions.some(option => !option.startsWith('--') && arg.startsWith(option) && arg !== option);
+    const reason = !arg.startsWith('-') || known ? 'このアプリでは未対応の引数' : '不明または未対応のオプション';
+    return { success: false, message: `git ${command}: ${reason}: ${arg}\n対応: ${supported}` };
   }
 
   private log(args: string[] = []): CommandResult {
@@ -784,6 +844,7 @@ export class GitEngine {
    * Used by the UI to simulate file edits.
    */
   public touch(filename: string, content: string = '') {
+    if (this.state.workingDirectory[filename] !== content) this.revision++;
     this.state.workingDirectory[filename] = content;
   }
 
@@ -1013,6 +1074,7 @@ export class GitEngine {
   }
 
   private fileOperation(command: string, args: string[]): CommandResult {
+    if (command === 'rm') return this.removeFile(args);
     const cached = command === 'rm' && args.includes('--cached');
     const [path, destination] = args.filter(arg => arg !== '--cached');
     const tracked = indexTree(this.state)[path];
@@ -1022,6 +1084,39 @@ export class GitEngine {
     if (command === 'mv') {
       this.state.workingDirectory[destination] = tracked;
       this.state.index[destination] = { path: destination, status: 'staged', content: tracked };
+    }
+    if (!cached) delete this.state.workingDirectory[path];
+    this.state.index[path] = { path, status: 'deleted' };
+    return { success: true, message: '', newState: this.getState() };
+  }
+
+  private removeFile(args: string[]): CommandResult {
+    let cached = false;
+    let force = false;
+    let pathsOnly = false;
+    const paths: string[] = [];
+    for (const arg of args) {
+      if (!pathsOnly && arg === '--') pathsOnly = true;
+      else if (!pathsOnly && arg === '--cached') cached = true;
+      else if (!pathsOnly && ['-f', '--force'].includes(arg)) force = true;
+      else if (!pathsOnly && arg.startsWith('-')) return this.unsupportedArgument('rm', arg, '[--cached] [-f|--force] [--] <file>', ['-r', '-n', '--dry-run', '-q', '--quiet', '--ignore-unmatch', '--sparse', '--pathspec-from-file']);
+      else paths.push(arg);
+    }
+    if (paths.length !== 1) return { success: false, message: 'このアプリでは git rm [--cached] [-f|--force] [--] <file> で一つのファイルを指定してください。' };
+    const path = paths[0];
+    const indexed = indexTree(this.state)[path];
+    if (indexed === undefined) return { success: false, message: 'Specify a tracked file.' };
+    if (!inSparseScope(this.state, path)) return { success: false, message: '先にsparse-checkoutの対象を広げてください。' };
+    const working = this.state.workingDirectory[path];
+    const committed = headTree(this.state)[path];
+    // Git allows already-missing files to be removed. With --cached, either
+    // HEAD or the working file must retain the staged content unless forced.
+    if (!force && working !== undefined) {
+      if (cached ? indexed !== committed && indexed !== working : indexed !== committed || indexed !== working) {
+        return { success: false, message: cached
+          ? 'Staged content differs from both HEAD and the working file. Restore it or use git rm --cached -f to force removal.'
+          : 'File has staged or local changes. Commit or restore them, or use git rm -f to force removal.' };
+      }
     }
     if (!cached) delete this.state.workingDirectory[path];
     this.state.index[path] = { path, status: 'deleted' };

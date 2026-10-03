@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { GitEngine } from '@/engine/git-simulator';
+import { GitEngine, type ConflictResolutionSession } from '@/engine/git-simulator';
 import { GitGraph } from '@/components/git-graph';
 import { ConflictSolver } from '@/components/conflict-solver';
 import { FileTree } from '@/components/file-tree';
@@ -139,6 +139,7 @@ export default function Game() {
     // Conflicts can change files even when the command reports failure.
     const nextState = engine.getState();
     if (result.newState) setState(nextState);
+    if (resolvingFile && !engine.isConflictResolutionCurrent(resolvingFile)) setResolvingFile(null);
     if (result.success || (result.newState && currentScenario?.goal.type === 'conflict_present')) {
       
       // ゴール達成を確認
@@ -178,7 +179,7 @@ export default function Game() {
   };
 
   // 現在コンフリクト解消中のファイルの状態
-  const [resolvingFile, setResolvingFile] = useState<{path: string, content: string} | null>(null);
+  const [resolvingFile, setResolvingFile] = useState<ConflictResolutionSession | null>(null);
   
   // プレビュー中のファイルの状態
   const [selectedFile, setSelectedFile] = useState<{path: string, content: string} | null>(null);
@@ -188,10 +189,12 @@ export default function Game() {
    * ワーキングディレクトリを解消された内容で更新します。
    */
   const handleResolve = (path: string, resolvedContent: string) => {
-    engine.touch(path, resolvedContent);
-    setState(engine.getState());
+    if (!resolvingFile || resolvingFile.path !== path) return;
+    const result = engine.resolveConflict(resolvingFile, resolvedContent);
     setResolvingFile(null);
-    setOutput(prev => [...prev, { type: 'success', content: `Resolved conflict in ${path}` }]);
+    setOutput(prev => [...prev, { type: result.success ? 'success' : 'error', content: result.message }]);
+    if (!result.success) return;
+    setState(engine.getState());
     if (currentScenario?.goal.type === 'conflict_resolved' && checkGoal(engine.getState(), currentScenario)) {
       setIsGoalMet(true);
       setCompletedIds(previous => new Set(previous).add(currentScenario.id));
@@ -363,9 +366,9 @@ export default function Game() {
             </span>
           </div>
           <div className="flex-1 overflow-auto">
-            {resolvingFile ? (
+            {resolvingFile && engine.isConflictResolutionCurrent(resolvingFile) ? (
               <ConflictSolver 
-                key={resolvingFile.path}
+                key={`${resolvingFile.path}:${resolvingFile.revision}`}
                 filePath={resolvingFile.path} 
                 content={resolvingFile.content} 
                 onResolve={handleResolve} 
@@ -381,7 +384,7 @@ export default function Game() {
                 state={state} 
                 onFileClick={(path, content) => {
                   if (content.includes('<<<<<<<')) {
-                    setResolvingFile({ path, content });
+                    setResolvingFile(engine.openConflictResolution(path));
                     setSelectedFile(null);
                   } else {
                     setSelectedFile({ path, content });

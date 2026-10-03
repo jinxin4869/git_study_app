@@ -108,6 +108,73 @@ test('conflict requires a decision and can be resolved and committed', async ({ 
   await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
 });
 
+test('aborting a merge closes the old solver and a repeated merge requires new decisions', async ({ page }) => {
+  await page.goto('/game');
+  await choose(page, 'コンフリクト', 'Level 7-1');
+  await run(page, 'git merge feature');
+  await page.getByRole('button', { name: 'index.htmlを開く' }).click();
+  await page.getByRole('button', { name: 'Accept Both' }).click();
+  await run(page, 'git status');
+  await expect(page.getByRole('button', { name: 'Complete Merge' })).toBeEnabled();
+  await run(page, 'git merge --abort');
+  await expect(page.getByRole('button', { name: 'Complete Merge' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'index.htmlを開く' }).click();
+  await expect(page.locator('pre').filter({ hasText: '<h1>Hello World</h1>' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close preview' }).click();
+  await run(page, 'git merge feature');
+  await page.getByRole('button', { name: 'index.htmlを開く' }).click();
+  await expect(page.getByRole('button', { name: 'Complete Merge' })).toBeDisabled();
+});
+
+test('editing a conflict from the terminal closes the solver and empty content does not pass', async ({ page }) => {
+  await page.goto('/game');
+  await choose(page, 'コンフリクト', 'Level 7-3');
+  await page.getByRole('button', { name: 'index.htmlを開く' }).click();
+  await page.getByRole('button', { name: 'Accept Both' }).click();
+  await run(page, 'echo "" > index.html');
+  await expect(page.getByRole('button', { name: 'Complete Merge' })).toHaveCount(0);
+  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '現在の演習を最初からやり直す' }).click();
+  await page.getByRole('button', { name: 'index.htmlを開く' }).click();
+  await expect(page.getByRole('button', { name: 'Complete Merge' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Accept Current', exact: true }).click();
+  await page.getByRole('button', { name: 'Complete Merge' }).click();
+  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+});
+
+test('invalid status arguments do not complete a command exercise', async ({ page }) => {
+  await page.goto('/game');
+  await choose(page, '基本操作', 'Level 1-3');
+  await run(page, 'git status --not-a-real-option');
+  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await run(page, 'git status');
+  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+});
+
+test('invalid commit arguments do not create a commit or complete an exercise', async ({ page }) => {
+  await page.goto('/game');
+  await choose(page, '基本操作', 'Level 1-5');
+  await run(page, 'git commit --not-a-real-option -m "Invalid commit"');
+  await expect(page.getByText('Level Completed!', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'コミットグラフ' }).locator('text').filter({ hasText: /^Invalid commit$/ })).toHaveCount(0);
+  await run(page, 'git commit -m "First commit"');
+  await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+});
+
+for (const choice of ['Incoming', 'Both']) {
+  test(`Accept ${choice} preserves the HTML structure and passes the resolution exercise`, async ({ page }) => {
+    await page.goto('/game');
+    await choose(page, 'コンフリクト', 'Level 7-3');
+    await page.getByRole('button', { name: 'index.htmlを開く' }).click();
+    await page.getByRole('button', { name: `Accept ${choice}`, exact: true }).click();
+    await page.getByRole('button', { name: 'Complete Merge' }).click();
+    await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'index.htmlを開く' }).click();
+    const expected = '<html>\n<body>\n' + (choice === 'Both' ? '<h1>Hello World</h1>\n' : '') + '<h1>Hello Git</h1>\n</body>\n</html>';
+    await expect(page.locator('pre')).toHaveText(expected);
+  });
+}
+
 test('interactive rebase completes and keeps the entire HEAD label visible', async ({ page }) => {
   await page.goto('/game');
   await choose(page, '履歴整理・対話的rebase', '修正コミットを吸収');
