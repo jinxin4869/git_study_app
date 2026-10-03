@@ -6,7 +6,7 @@ import { GitGraph, Terminal, ArrowRight, Code, GitBranch } from 'lucide-react';
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-950 text-gray-100 p-4 overflow-hidden relative">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-950 text-gray-100 px-4 py-8 overflow-hidden relative">
       {/* Background Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-900/20 rounded-full blur-[100px]" />
@@ -80,7 +80,7 @@ export default function Home() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1, duration: 1 }}
-        className="absolute bottom-6 text-gray-500 text-sm"
+        className="relative mt-12 text-gray-400 text-sm text-center"
       >
         Built for developers, by developers.
       </motion.div>
