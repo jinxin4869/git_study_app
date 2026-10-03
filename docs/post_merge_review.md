@@ -1,6 +1,6 @@
 # PR #6マージ後の再評価と修正（2026-10-03 JST）
 
-個人がブラウザ上でGitを学ぶ用途に対し、保存履歴を守ること、状態に基づく採点、失敗入力の拒否、実行できる復旧案内を優先した。139演習と既存の暗色3パネル・主要操作を維持する。全98 IDとIDのない候補の判断は [ロードマップの末尾の最新節](remaining_work_roadmap.md#マージ後の再評価基点-cd3272dpr-6取込後) に記録した。調査履歴は削除しない。
+個人がブラウザ上でGitを学ぶ用途に対し、保存履歴を守ること、状態に基づく採点、失敗入力の拒否、実行できる復旧案内を優先した。変更は [PR #12](https://github.com/jinxin4869/git_study_app/pull/12)。139演習と既存の暗色3パネル・主要操作を維持する。全98 IDとIDのない候補の判断は [ロードマップの末尾の最新節](remaining_work_roadmap.md#マージ後の再評価基点-cd3272dpr-6取込後) に記録した。調査履歴は削除しない。
 
 ## 基点・他の作業の保護・公開版
 
@@ -62,7 +62,7 @@ version 1、selection/complete/hintのキーとJSON形式を維持する。新�
 | 公開smoke | PR #6マージ後の公開aliasで12件成功、PC/390px幅、再試行0。今回修正の公開検証ではない |
 | 保存双方向互換性 | cd3272dとの旧→新/新→旧/双方削除が一致 |
 | 依存監査 | npm11で本番0・終了0、全High5・終了1。未解決警告とnpm10 endpoint失敗は[依存記録](dependency_security_updates.md) |
-| PR CI / Preview | 最終対象SHAとchecksは作業PRに記録。標準Ubuntu24.04/Node22/OS依存付き3ブラウザを維持 |
+| PR CI / Preview | 最終対象SHAと結果は [PR #12 checks](https://github.com/jinxin4869/git_study_app/pull/12/checks) とPR本文を参照。標準Ubuntu24.04/Node22/OS依存付き3ブラウザを維持。Previewのビルド成功と保護画面の操作確認は区別する |
 
 ```bash
 npm run lint

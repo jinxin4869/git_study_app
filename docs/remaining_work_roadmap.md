@@ -484,7 +484,7 @@ F09の30件は重複した依存経路を含むパッケージ単位の集計で
 
 この節が最新の分類。上の調査・PR #5/PR #6時点の節は履歴として保持する。個人のブラウザ学習に必要な不具合を再現し、後回しだったE03/T04の必要な部分を今回へ戻した。広いIDは**記載範囲だけの完了**であり、最右列の残作業を全体完了に含めない。
 
-作業ブランチは `fix/post-merge-learning-reliability`。PR #6のマージSHAは `cd3272dbff8f8be486b2acf4fb56cf34b3b45d14`。基点main/公開版、今回の実装/テスト、手動未検証を分けた [再評価記録](post_merge_review.md)、[公開手順](release_runbook.md)、[依存監査](dependency_security_updates.md) を根拠とする。
+作業ブランチは `fix/post-merge-learning-reliability`、変更は [PR #12](https://github.com/jinxin4869/git_study_app/pull/12)。PR #6のマージSHAは `cd3272dbff8f8be486b2acf4fb56cf34b3b45d14`。基点main/公開版、今回の実装/テスト、手動未検証を分けた [再評価記録](post_merge_review.md)、[公開手順](release_runbook.md)、[依存監査](dependency_security_updates.md) を根拠とする。
 
 | ID | 分類 / 結果 | 理由 | 現在の対応範囲・根拠 | 残る範囲 / 再検討条件 |
 | --- | --- | --- | --- | --- |
