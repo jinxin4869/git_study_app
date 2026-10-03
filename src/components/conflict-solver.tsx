@@ -107,19 +107,19 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
 
   return (
     <div className="bg-gray-900 p-4 rounded-lg border border-gray-700 font-mono text-sm">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-bold text-yellow-400">
+      <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
+        <h3 className="min-w-0 break-all text-lg font-bold text-yellow-400">
             {hasConflicts ? `Conflict Resolution: ${filePath}` : `File Preview: ${filePath}`}
         </h3>
-        <div className="space-x-2">
-          <button onClick={onCancel} className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-white">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={onCancel} className="min-h-11 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white">
             {hasConflicts ? 'Cancel' : 'Close'}
           </button>
           {hasConflicts && (
             <button 
                 onClick={handleComplete} 
                 disabled={!allResolved}
-                className={`px-3 py-1 rounded flex items-center gap-2 ${allResolved ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
+                className={`min-h-11 px-3 py-2 rounded flex items-center gap-2 ${allResolved ? 'bg-green-800 hover:bg-green-700 text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
             >
                 <Check size={16} /> Complete Merge
             </button>
@@ -131,17 +131,17 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
         {sections.map((section) => (
           <div key={section.id}>
             {section.type === 'text' ? (
-              <pre className="text-gray-400 whitespace-pre-wrap">{section.content}</pre>
+              <pre className="text-gray-400 whitespace-pre-wrap break-words">{section.content}</pre>
             ) : (
               <div className="border border-yellow-600 rounded overflow-hidden">
-                <div className="grid grid-cols-2 divide-x divide-gray-700">
+                <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-gray-700">
                   {/* Current Changes Panel */}
                   <div className={`p-2 ${decisions[section.id] === 'current' || decisions[section.id] === 'both' ? 'bg-green-900/30' : 'bg-gray-800/50'}`}>
                     <div className="text-xs text-green-400 mb-1 font-bold">Current Change (HEAD)</div>
-                    <pre className="whitespace-pre-wrap text-gray-300">{section.current}</pre>
+                    <pre className="whitespace-pre-wrap break-words text-gray-300">{section.current}</pre>
                     <button 
                       onClick={() => handleDecision(section.id, 'current')}
-                      className={`mt-2 w-full py-1 text-xs rounded border ${decisions[section.id] === 'current' ? 'bg-green-600 border-green-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
+                      className={`mt-2 w-full min-h-11 py-2 text-xs rounded border ${decisions[section.id] === 'current' ? 'bg-green-800 border-green-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
                     >
                       Accept Current
                     </button>
@@ -150,10 +150,10 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
                   {/* Incoming Changes Panel */}
                   <div className={`p-2 ${decisions[section.id] === 'incoming' || decisions[section.id] === 'both' ? 'bg-blue-900/30' : 'bg-gray-800/50'}`}>
                     <div className="text-xs text-blue-400 mb-1 font-bold">Incoming Change</div>
-                    <pre className="whitespace-pre-wrap text-gray-300">{section.incoming}</pre>
+                    <pre className="whitespace-pre-wrap break-words text-gray-300">{section.incoming}</pre>
                     <button 
                       onClick={() => handleDecision(section.id, 'incoming')}
-                      className={`mt-2 w-full py-1 text-xs rounded border ${decisions[section.id] === 'incoming' ? 'bg-blue-600 border-blue-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
+                      className={`mt-2 w-full min-h-11 py-2 text-xs rounded border ${decisions[section.id] === 'incoming' ? 'bg-blue-800 border-blue-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
                     >
                       Accept Incoming
                     </button>
@@ -162,7 +162,7 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
                 <div className="p-2 bg-gray-800 border-t border-gray-700 text-center">
                    <button 
                       onClick={() => handleDecision(section.id, 'both')}
-                      className={`w-full py-1 text-xs rounded border ${decisions[section.id] === 'both' ? 'bg-purple-600 border-purple-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
+                      className={`w-full min-h-11 py-2 text-xs rounded border ${decisions[section.id] === 'both' ? 'bg-purple-800 border-purple-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
                     >
                       Accept Both
                     </button>

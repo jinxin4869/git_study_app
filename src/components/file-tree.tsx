@@ -165,7 +165,7 @@ export function FileTree({ state, onFileClick }: FileTreeProps) {
             type="button"
             aria-expanded={isExpanded}
             aria-label={`${node.path}フォルダ`}
-            className="flex w-full items-center gap-1 py-1 px-2 hover:bg-gray-800 focus-visible:outline-2 focus-visible:outline-blue-400 cursor-pointer text-gray-400 select-none text-left"
+            className="flex min-h-11 w-full items-center gap-1 py-1 px-2 hover:bg-gray-800 focus-visible:outline-2 focus-visible:outline-blue-400 cursor-pointer text-gray-400 select-none text-left"
             style={{ paddingLeft }}
             onClick={() => toggleFolder(node.path)}
           >
@@ -195,7 +195,7 @@ export function FileTree({ state, onFileClick }: FileTreeProps) {
           statusIcon = <div className="w-2 h-2 rounded-full bg-green-500 ml-auto" title="Staged" />;
           break;
         case 'untracked':
-          colorClass = 'text-gray-500';
+          colorClass = 'text-gray-400';
           statusIcon = <HelpCircle size={12} className="text-gray-600 ml-auto" />; // Removed title prop from Icon
           break;
         case 'conflict':
@@ -210,7 +210,7 @@ export function FileTree({ state, onFileClick }: FileTreeProps) {
           type="button"
           aria-label={`${node.path}を開く`}
           key={node.path}
-          className="flex w-full items-center gap-2 py-1 px-2 hover:bg-gray-800 focus-visible:outline-2 focus-visible:outline-blue-400 cursor-pointer select-none text-left"
+          className="flex min-h-11 w-full items-center gap-2 py-1 px-2 hover:bg-gray-800 focus-visible:outline-2 focus-visible:outline-blue-400 cursor-pointer select-none text-left"
           style={{ paddingLeft }}
           onClick={() => node.content !== undefined && onFileClick(node.path, node.content)}
         >

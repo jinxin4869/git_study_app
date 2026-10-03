@@ -97,11 +97,33 @@ npm run test
 npm run test:watch
 ```
 
+### ブラウザのE2Eテスト
+
+Playwrightで画面操作を確認します。初回はChromiumをインストールしてください。
+本番ビルドを用意すると、テストがポート3111でサーバーを自動起動・終了します。
+
+```bash
+npx playwright install chromium
+npm run build
+npm run test:e2e
+
+# ブラウザを表示して確認する場合
+npm run test:e2e:headed
+
+# 実行結果を表示
+npm run test:e2e:report
+```
+
+PC・スマホ・狭いスマホ・タブレットの4サイズで、検索・やり直し、競合解決、対話的rebase、部分ステージ、模擬PRの承認・CIを確認します。フッターの重なり、HEADラベルの収まりと自動スクロール、操作ボタンの高さも検証します。画像と失敗時のトレースは `test-results/`、HTMLレポートは `playwright-report/` に出力します。
+
+GitHub ActionsではmainへのpushとPRごとに、lint・型チェック・ユニットテスト・本番ビルド・E2Eテストを実行します。レポートは14日間保存します。
+
 ## ドキュメント
 
 詳細な設計や実装内容については、`docs/` ディレクトリ内のドキュメントを参照してください。
 
 -   [実務向けGit学習カリキュラム](docs/practical_git_curriculum.md): 12章の学習順序、139演習の対応状況、7つの総合演習、再現範囲
+-   [画面修正とE2Eテスト](docs/audits/ui_fixes_and_e2e.md): 監査の5項目への対応、28ケースのブラウザテストとCI
 -   [レビューと検証の記録](docs/review_verification.md): 修正した不具合、回帰テスト、ブラウザ確認、クラウドでの確認範囲
 -   [01_project_setup.md](docs/01_project_setup.md): プロジェクトセットアップ
 -   [02_core_features.md](docs/02_core_features.md): コア機能の実装
@@ -117,4 +139,4 @@ npm run test:watch
 -   **Styling**: Tailwind CSS
 -   **Icons**: Lucide React
 -   **Animation**: Framer Motion, Canvas Confetti
--   **Testing**: Vitest
+-   **Testing**: Vitest、Playwright

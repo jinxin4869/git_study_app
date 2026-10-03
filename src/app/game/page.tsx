@@ -252,7 +252,7 @@ export default function Game() {
           <button 
             onClick={() => currentScenario ? loadScenario(currentScenario) : window.location.reload()}
             aria-label="現在の演習を最初からやり直す"
-            className="p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors"
+            className="min-w-11 min-h-11 flex items-center justify-center p-2 hover:bg-gray-800 rounded-full text-gray-400 hover:text-white transition-colors"
             title="演習をやり直す"
           >
             <RotateCcw className="w-4 h-4" />
@@ -356,7 +356,7 @@ export default function Game() {
         <div className="flex-1 flex flex-col bg-gray-900 overflow-hidden">
           <div className="p-3 border-b border-gray-800 font-bold text-sm text-gray-400 uppercase tracking-wider flex justify-between items-center">
             <span>Working Directory</span>
-            <span className="text-xs normal-case text-gray-600">
+            <span className="text-xs normal-case text-gray-300">
               <span className="text-yellow-500">●</span> Mod
               <span className="text-green-500 ml-2">●</span> Staged
               <span className="text-red-500 ml-2">●</span> Conflict
