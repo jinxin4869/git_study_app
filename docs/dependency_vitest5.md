@@ -2,7 +2,7 @@
 
 対象: [PR #10](https://github.com/jinxin4869/git_study_app/pull/10)。基点はmain `38ed23d`（PR #7/#12取込済み）。最新mainをmergeし、既存の学習体験修正と依存更新を保持した。
 
-## 原因と変更
+## 原因と変更（初回修正）
 
 元のPRは `npm ci` でERESOLVEになった。Vitest 5.0.2の任意peer `@types/node` が22系以上を要求する一方、アプリが20系を指定していたため、任意peerをインストールした構成として不整合だった。
 
@@ -19,3 +19,13 @@ Ubuntu 22.04 / Node 22.22.1で、lint、型チェック、Vitest 5のunit621件�
 最終コミットの `npm ci` とChromium4サイズ/Firefox/WebKitのE2Eは [PR checks](https://github.com/jinxin4869/git_study_app/pull/10/checks) とPR本文に記録する。
 
 npm 11.21.0での全依存監査はHigh 5件（終了1）。対象は既存のNext lint → fast-glob → micromatch → braces経路で、新しい警告はない。ESLint 9のdeprecatedと未修正版bracesの警告は別課題。本PRのmainマージと本番公開は行っていない。
+
+## main更新後の競合解消（2026-10-03）
+
+PR #8/#11のマージ後のmain `f923cd2` を取り込み、package.jsonとpackage-lock.jsonの競合を解消した。Vite 8.3.1、Lucide 1.49.0、Oxcのautomatic JSX変換とvitest.config.mtsを保持する。
+
+本PRのVitest 5.0.2、Node 22型定義、Node engines/READMEの対応範囲を保持する。初回修正時のVite 7維持は履歴であり、今回からmainのVite 8と併用する。意図しないVitest 5.0.3への更新は行っていない。
+
+最新mainのlockfileを基点にnpm 11.21.0で通常のpeer解決により再生成した。npm ci、lint、型チェック、unit621件（25ファイル）、npm ls --allが成功。競合マーカーや未解消ファイルを残さず、peer無視・履歴書換え・検査無効化は行わない。
+
+この再同期の最終コミットに対するbuild/E2E/Previewと対象SHAは [PR checks](https://github.com/jinxin4869/git_study_app/pull/10/checks) とPR本文を参照する。初回CI成功記録とは区別する。mainへのマージと本番公開は行っていない。
