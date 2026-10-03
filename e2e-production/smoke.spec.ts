@@ -65,3 +65,33 @@ test('public operation guidance matches an executable rebase abort and restores 
   await command(page).press('Enter');
   await expect(page.getByRole('list', { name: '達成条件' })).not.toContainText('未達:');
 });
+
+test('public terminal suspends following while reading old output and resumes on demand', async ({ page }) => {
+  await page.goto('/game'); await choose(page, 'Level 1-3');
+  for (let i = 0; i < 18; i++) await run(page, 'git status');
+  const log = page.getByRole('region', { name: '端末出力' });
+  await expect.poll(() => log.evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThan(25);
+  await command(page).fill('git status');
+  await log.evaluate(element => { element.scrollTop = 0; });
+  await expect(page.getByRole('button', { name: '過去の出力を表示中 · 最新の出力へ戻る' })).toBeVisible();
+  await command(page).evaluate(element => element.closest('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+  await expect(page.getByRole('button', { name: '新しい出力があります · 最新の出力へ戻る' })).toBeVisible();
+  expect(await log.evaluate(element => element.scrollTop)).toBe(0);
+  await page.getByRole('button', { name: /最新の出力へ戻る/ }).click();
+  await expect.poll(() => log.evaluate(element => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThan(25);
+});
+
+test('public authored completion explanation and next lesson work without hints', async ({ page }) => {
+  await page.goto('/game'); await choose(page, 'ステージ後の再編集');
+  await expect(page.getByRole('heading', { name: '1. 考え方' })).toHaveCount(0);
+  await page.getByText('この演習の前提', { exact: true }).click();
+  await expect(page.getByText('各演習は独立した初期状態から始まります。前の演習の途中状態や完了は必要ありません。')).toBeVisible();
+  await run(page, 'git commit -m "Record version 2"');
+  const explanation = page.getByRole('region', { name: '完了後の解説' });
+  await expect(explanation).toContainText('commitはindexのversion 2を記録し、後のversion 3は未記録で残ります。');
+  await explanation.getByText('達成時に満たした条件', { exact: true }).click();
+  await expect(explanation).toContainText('HEADのファイル内容');
+  await explanation.getByRole('button', { name: /次のおすすめ: ステージだけを解除/ }).click();
+  await expect(command(page)).toBeFocused();
+  await expect(page.getByRole('heading', { name: 'なぜ達成したか' })).toHaveCount(0);
+});

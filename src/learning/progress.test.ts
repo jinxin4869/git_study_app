@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { ProgressStore, PROGRESS_PREFIX, SELECTION_KEY } from './progress';
+import { ProgressStore, PROGRESS_PREFIX, SELECTION_KEY, completedFromSnapshot } from './progress';
 
 class MemoryStorage {
   data = new Map<string, string>();
   blocked = false;
   quota = false;
+  readBlocked = false;
+  failRemove: string | null = null;
   get length() { return this.data.size; }
   key(i: number) { return [...this.data.keys()][i] ?? null; }
-  getItem(key: string) { if (this.blocked) throw new Error('blocked'); return this.data.get(key) ?? null; }
+  getItem(key: string) { if (this.blocked || this.readBlocked) throw new Error('blocked'); return this.data.get(key) ?? null; }
   setItem(key: string, value: string) { if (this.quota || this.blocked) throw new Error('quota'); this.data.set(key, value); }
-  removeItem(key: string) { if (this.blocked) throw new Error('blocked'); this.data.delete(key); }
+  removeItem(key: string) { if (this.blocked || this.failRemove === key) throw new Error('blocked'); this.data.delete(key); }
 }
 const create = (storage = new MemoryStorage()) => ({ storage, store: new ProgressStore(storage, new Set(['one', 'two']), new Set(['基本操作'])) });
 
@@ -99,5 +101,65 @@ describe('versioned browser learning records', () => {
     storage.blocked = true;
     expect(store.snapshot().warnings.length).toBeGreaterThan(0);
     expect(store.clear()).toContain('削除できません');
+  });
+  it('retains known completions on a failed read, then reflects verified deletion and rejects corrupt records', () => {
+    const { store, storage } = create();
+    store.complete('one', 10);
+    const previous = new Set(store.snapshot().completed.keys());
+    storage.readBlocked = true;
+    const denied = store.snapshot();
+    expect(denied.unreadableCompletions).toEqual(new Set(['one', 'two']));
+    expect(completedFromSnapshot(denied, previous, ['two'])).toEqual(new Set(['one', 'two']));
+    storage.readBlocked = false;
+    store.clear('one');
+    expect(completedFromSnapshot(store.snapshot(), previous, [])).toEqual(new Set());
+    storage.setItem(`${PROGRESS_PREFIX}complete:one`, '{');
+    expect(completedFromSnapshot(store.snapshot(), previous, [])).toEqual(new Set());
+  });
+  it.each(['current', 'all'])('restores already removed records when %s deletion fails, then retries without affecting unrelated storage', scope => {
+    const { store, storage } = create();
+    store.complete('one', 10); store.reveal('one', 4); store.complete('two', 20);
+    store.select({ lastId: 'one', category: 'all', search: '' });
+    storage.setItem('unrelated', 'keep');
+    const before = new Map(storage.data);
+    storage.failRemove = `${PROGRESS_PREFIX}hint:one`;
+    expect(store.clear(scope === 'current' ? 'one' : undefined)).toContain('削除できません');
+    expect(storage.data).toEqual(before);
+    storage.failRemove = null;
+    expect(store.clear(scope === 'current' ? 'one' : undefined)).toBeNull();
+    expect(store.snapshot().completed.has('one')).toBe(false);
+    expect(store.snapshot().completed.has('two')).toBe(scope === 'current');
+    expect(storage.getItem('unrelated')).toBe('keep');
+  });
+  it('does not remove anything if the deletion preflight cannot read records', () => {
+    const { store, storage } = create();
+    store.complete('one', 10); store.reveal('one', 4);
+    const before = new Map(storage.data);
+    storage.readBlocked = true;
+    expect(store.clear('one')).toContain('削除できません');
+    expect(storage.data).toEqual(before);
+  });
+  it('reports partial deletion if the storage permission also prevents rollback', () => {
+    const { store, storage } = create();
+    store.complete('one', 10); store.reveal('one', 4);
+    storage.failRemove = `${PROGRESS_PREFIX}hint:one`;
+    storage.quota = true;
+    expect(store.clear('one')).toContain('一部を戻せませんでした');
+    storage.quota = false; storage.failRemove = null;
+    expect(store.clear('one')).toBeNull();
+  });
+  it('does not overwrite a newer completion from another tab while rolling back deletion', () => {
+    const { store, storage } = create();
+    store.complete('one', 10); store.reveal('one', 4);
+    const remove = storage.removeItem.bind(storage);
+    storage.removeItem = key => {
+      if (key.endsWith('hint:one')) {
+        storage.setItem(`${PROGRESS_PREFIX}complete:one`, JSON.stringify({ version: 1, id: 'one', completedAt: 99 }));
+        throw new Error('concurrent failure');
+      }
+      remove(key);
+    };
+    expect(store.clear('one')).toContain('削除できません');
+    expect(store.snapshot().completed.get('one')).toBe(99);
   });
 });

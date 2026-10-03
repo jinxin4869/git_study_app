@@ -10,7 +10,7 @@ import { TerminalOutput, type TerminalLine } from '@/components/terminal-output'
 import { GitState, Scenario, CommandResult } from '@/types/git';
 import { scenarios } from '@/engine/scenarios';
 import { assessGoal } from '@/engine/goal-checker';
-import { ProgressStore, PROGRESS_PREFIX } from '@/learning/progress';
+import { ProgressStore, PROGRESS_PREFIX, completedFromSnapshot } from '@/learning/progress';
 import { lessonHints } from '@/learning/hints';
 import { operationGuidance } from '@/learning/operation-guidance';
 import { lessonNotes } from '@/learning/lesson-notes';
@@ -43,7 +43,7 @@ function LearningSession() {
       const store = new ProgressStore(window.localStorage, new Set(scenarios.map(item => item.id)), new Set(categories));
       return { store, snapshot: store.snapshot() };
     } catch {
-      return { store: null, snapshot: { lastId: null, category: 'all', search: '', completed: new Map<string, number>(), hints: new Map<string, number>(), warnings: ['ブラウザの保存領域にアクセスできません。保存の許可を確認してください。この画面では学習を続けられます。'] } };
+      return { store: null, snapshot: { lastId: null, category: 'all', search: '', completed: new Map<string, number>(), hints: new Map<string, number>(), unreadableCompletions: new Set<string>(), warnings: ['ブラウザの保存領域にアクセスできません。保存の許可を確認してください。この画面では学習を続けられます。'] } };
     }
   });
   const initialScenario = scenarios.find(item => item.id === saved.snapshot.lastId) ?? null;
@@ -87,6 +87,7 @@ function LearningSession() {
   const pendingCompletions = useRef(new Map<string, number>());
   const pendingHints = useRef(new Map<string, number>());
   const commandRef = useRef<HTMLInputElement>(null);
+  const saveAlertRef = useRef<HTMLParagraphElement>(null);
   const filePanelRef = useRef<HTMLDivElement>(null);
   const fileReturnPath = useRef<string | null>(null);
   const composing = useRef(false);
@@ -163,7 +164,8 @@ function LearningSession() {
       const snapshot = storeRef.current?.snapshot();
       if (snapshot) {
         // Read the current disk, not event.newValue: queued events may already be stale.
-        setCompletedIds(new Set([...snapshot.completed.keys(), ...pendingCompletions.current.keys()]));
+        const unsaved = [...pendingCompletions.current.keys()];
+        setCompletedIds(previous => completedFromSnapshot(snapshot, previous, unsaved));
         if (snapshot.warnings.length) setSaveError(snapshot.warnings.join(' '));
       }
     };
@@ -229,16 +231,22 @@ function LearningSession() {
         if (error) errors.push(error); else pendingHints.current.delete(id);
       }
       const snapshot = storeRef.current.snapshot();
-      setCompletedIds(new Set([...snapshot.completed.keys(), ...pendingCompletions.current.keys()]));
+      const unsaved = [...pendingCompletions.current.keys()];
+      setCompletedIds(previous => completedFromSnapshot(snapshot, previous, unsaved));
       errors.push(...snapshot.warnings);
       setSaveError([...new Set(errors)].join(' '));
-      notify(errors.length ? '保存を再試行しましたが、未保存の記録があります。' : '保存を再試行しました。');
+      notify(errors.length ? '保存を再試行しましたが、未保存または確認できない記録があります。' : '保存を再試行しました。');
     } catch { setSaveError('保存領域にアクセスできません。ブラウザの保存設定を確認してください。'); }
   };
   const deleteRecords = () => {
     const id = deleteScope === 'current' ? currentScenario?.id : undefined;
     const error = storeRef.current?.clear(id) ?? (storeRef.current ? null : '保存領域にアクセスできません。');
-    if (error) { setSaveError(error); return; }
+    if (error) {
+      setSaveError(error);
+      // Reveal the recovery message inside the small-screen sidebar after this explicit action.
+      requestAnimationFrame(() => saveAlertRef.current?.focus());
+      return;
+    }
     if (id) {
       pendingCompletions.current.delete(id);
       pendingHints.current.delete(id);
@@ -421,7 +429,7 @@ function LearningSession() {
           </div> : null}
         </details>
         {saveError ? <div className="p-3 text-sm text-amber-200 border-b border-gray-800">
-          <p role="alert">{saveError}</p>
+          <p ref={saveAlertRef} role="alert" tabIndex={-1} className="focus-visible:outline-2 focus-visible:outline-blue-400">{saveError}</p>
           <button onClick={retrySaving} className="min-h-11 underline">保存を再試行</button>
         </div> : null}
         <div className="flex-1 min-h-20 overflow-auto p-2 space-y-2">
@@ -624,8 +632,9 @@ function LearningSession() {
                 onFileClick={(path) => {
                   fileReturnPath.current = path;
                   focusPanel.current = true;
-                  if (state.workingDirectory[path]?.includes('<<<<<<<')) {
-                    setResolvingFile(engine.openConflictResolution(path));
+                  const session = engine.openConflictResolution(path);
+                  if (session) {
+                    setResolvingFile(session);
                     setSelectedFile(null);
                   } else {
                     setSelectedFile(path);

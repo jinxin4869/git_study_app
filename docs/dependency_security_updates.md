@@ -96,3 +96,28 @@ CI=1 npm run test:e2e -- --workers=2 --retries=0
 CIは [checkout](https://github.com/actions/checkout)、[setup-node](https://github.com/actions/setup-node)、[upload-artifact](https://github.com/actions/upload-artifact) をv7へ更新した。公式のNode 24実行ランタイムとUbuntu 24.04での互換性を確認し、アプリ用Node 22の指定は維持する。最終的な実行結果は今回のPR checksと [改善記録](learning_refinements.md) に記録する。月次Dependabotと手動監査の手順を [runbook](release_runbook.md) に設定し、検査の無効化やaudit --forceは行わない。
 
 CI run [37104472184](https://github.com/jinxin4869/git_study_app/actions/runs/37104472184) はSHA `107e773` で全チェック成功（unit565、E2E252、再試行なし）。ActionsのNode 20非推奨警告は解消し、ESLint 9のdeprecated警告は上記peer制約で残る。ubuntu-latestのUbuntu 26への自動切替予定も通知されたため、検証済みの `ubuntu-24.04` をCIに明示指定した。[公式の移行告知](https://github.com/actions/runner-images/issues/14748) と新しいPlaywrightの対応OSを確認してから、別途OS版を更新する。固定ラベルのOS更新は通常のrunnerイメージ更新を受ける。最終SHAの実行はPR checksを参照する。
+
+## PR #6マージ後の再監査（2026-10-03 JST、基点 `cd3272d`）
+
+公開mainのlockfileを維持して再監査した。npm 10.9.4の全依存監査はHigh 5件・終了コード1。本番監査はbulk endpointの後のquick endpointでHTTP 400（deprecated endpoint）となり、**この失敗から本番0件とは判定しなかった**。監査用CLIのみnpm 11.21.0へ切り替え、以下を再実行した。アプリのpackage.json/lockfileは変更していない。
+
+```bash
+npm exec --yes --package=npm@11.21.0 -- npm audit --omit=dev --json
+npm exec --yes --package=npm@11.21.0 -- npm audit --json
+```
+
+npm 11の結果は本番0件・終了コード0、全依存High 5件・終了コード1。`eslint-config-next → @next/eslint-plugin-next → fast-glob → micromatch → braces` の経路は同じ。[bracesの告知](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)では修正版なし。信頼しない深く入れ子のbrace patternを開発toolingで処理するとスタック枯渇の条件になる。ブラウザの演習入力・保存データ・ファイル内容はこのglob処理へ渡らない。開発依存の警告は解消していない。
+
+npm registryのpeerDependenciesも再確認した。eslint-plugin-react 7.37.5、jsx-a11y 6.10.2、import 2.32.0は引き続きESLint 10を含まない。ESLint 9のdeprecated警告は残る。監査の候補14系へのダウングレード、強制peer無視、検査無効化は行わない。修正版/親依存/plugin対応が出た時に更新と全検証を行う。
+
+既存Dependabot PRは今回の修正へ重複して取り込まない。
+
+| PR | 判断 / 根拠 | 残る作業 |
+| --- | --- | --- |
+| [#7](https://github.com/jinxin4869/git_study_app/pull/7) | 互換依存8更新。verify [37106430247](https://github.com/jinxin4869/git_study_app/actions/runs/37106430247)成功。通常更新のレビュー候補 | 本PRとの統合後にも検証し、所有者が採用判断する。braces/ESLint警告の解消とは別 |
+| [#8](https://github.com/jinxin4869/git_study_app/pull/8) | Vite 7→8のmajor | Node要件とVitest連携を別レビュー |
+| [#9](https://github.com/jinxin4869/git_study_app/pull/9) | TypeScript 5→7のmajor | 型/設定/Next.js互換性を別レビュー |
+| [#10](https://github.com/jinxin4869/git_study_app/pull/10) | Vitest 4→5のmajor | Vite/Node/API/実Git比較テストを別レビュー |
+| [#11](https://github.com/jinxin4869/git_study_app/pull/11) | lucide-react 0.x→1.xのmajor | アイコンAPIとUIの互換性を別レビュー |
+
+新しいmain/採用した依存PRの監査はその対象SHAで再実行する。既存PRのmerge、main直接push、手動deployは行っていない。

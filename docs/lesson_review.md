@@ -108,7 +108,7 @@
 | stash-pop | state_matches: stashCount, working | app.tsがdraft、stashが零件であることを確認します。 | popが競合すると保管は残ります。成功した復元と失敗した復元を区別します。 |
 | stash-select | state_matches: stashCount, working | app.tsがdraftで、stashの件数が二件のままであることを確認します。 | stashの番号は新しい保管や削除で変わります。適用前に対象を確認します。 |
 | stash-drop | state_matches: stashCount, working | stashが零件、app.tsがbaseのままであることを確認します。 | dropした内容の復旧を保証しません。保管内容が不要かを先に確認します。 |
-| stash-conflict | state_matches: stashCount, working, head | app.tsがCombined、HEADがc2、stashが一件残ることを確認します。 | stashの競合はmergeコミットを作る操作とは異なります。復元結果を読んでから保管を削除します。 |
+| stash-conflict | state_matches: stashCount, working, index, head, unmergedPaths | app.tsの作業ツリーとindexがCombined、HEADがc2、stashが一件残ることを確認します。git statusでUnmerged pathsがなくなり、git diff --stagedで解消内容を確認できます。 | 内容を編集するだけでは未解消パスは残ります。stageしても内容の正しさは保証されません。内容とindexを確認し、保管の削除は復元結果を読んでから行います。 |
 | interactive-squash | state_matches: operation, parents, message, tree | 二つの内容を保ち、親c1とFeature・Docs両方のメッセージを確認します。 | todoは画面またはsimulateで編集します。実Gitはエディタを使い、まとめるメッセージも編集できます。 |
 | interactive-fixup | state_matches: operation, parents, message, tree | 両ファイルの内容と、親c1、メッセージFeatureを確認します。 | squashとfixupは残すメッセージが違います。共有済み履歴の書き換えは合意が必要です。 |
 | interactive-reword | state_matches: operation, historyMessages, tree | 履歴のDocs、Improve app、Initialという順と、両ファイルの内容を確認します。 | このアプリのrewordは一時停止後にamendします。実Gitではメッセージ用エディタが開きます。 |

@@ -16,6 +16,11 @@ export function operationGuidance(state: GitState): OperationGuidance | null {
   if (state.pendingMerge) return {
     title: 'merge 中', detail: '競合ファイルの内容を選び、git addで解決内容をstageしてからcommitで統合を完了します。abortは統合前の作業へ戻します。', commands: ['git status', 'git commit -m "Resolve merge"', 'git merge --abort']
   };
+  if (state.unmergedPaths?.length) return {
+    title: '未解消の競合',
+    detail: `未解消パス: ${state.unmergedPaths.join('、')}。内容を解消してからgit addでstageしてください。stashの競合では元の保管は残ります。演習をやり直す場合は「現在の演習を最初からやり直す」を使います。`,
+    commands: ['git status']
+  };
   if (state.bisect) return {
     title: 'bisect 中', detail: `${state.bisect.found ? `原因コミット: ${state.bisect.found}。` : `正常: ${state.bisect.good ?? '未指定'} / 異常: ${state.bisect.bad ?? '未指定'}。候補を調べてgoodまたはbadを指定します。`} resetで調査開始前へ戻ります。追跡ファイルの変更が残る場合は先に保存してください。`, commands: [...(state.bisect.found ? [] : ['git bisect good', 'git bisect bad']), 'git bisect reset']
   };
