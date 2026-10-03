@@ -139,6 +139,7 @@ export default function Game() {
     // Conflicts can change files even when the command reports failure.
     const nextState = engine.getState();
     if (result.newState) setState(nextState);
+    if (nextState.activeWorktree !== state.activeWorktree) setSelectedFile(null);
     if (resolvingFile && !engine.isConflictResolutionCurrent(resolvingFile)) setResolvingFile(null);
     if (result.success || (result.newState && currentScenario?.goal.type === 'conflict_present')) {
       
@@ -182,7 +183,8 @@ export default function Game() {
   const [resolvingFile, setResolvingFile] = useState<ConflictResolutionSession | null>(null);
   
   // プレビュー中のファイルの状態
-  const [selectedFile, setSelectedFile] = useState<{path: string, content: string} | null>(null);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const previewFile = selectedFile === null ? null : { path: selectedFile, content: state.workingDirectory[selectedFile] };
 
   /**
    * UIでコンフリクトが解消されたときのコールバック。
@@ -374,20 +376,20 @@ export default function Game() {
                 onResolve={handleResolve} 
                 onCancel={() => setResolvingFile(null)} 
               />
-            ) : selectedFile ? (
+            ) : previewFile ? (
               <FilePreview
-                file={selectedFile}
+                file={previewFile}
                 onClose={() => setSelectedFile(null)}
               />
             ) : (
               <FileTree 
                 state={state} 
-                onFileClick={(path, content) => {
-                  if (content.includes('<<<<<<<')) {
+                onFileClick={(path) => {
+                  if (state.workingDirectory[path]?.includes('<<<<<<<')) {
                     setResolvingFile(engine.openConflictResolution(path));
                     setSelectedFile(null);
                   } else {
-                    setSelectedFile({ path, content });
+                    setSelectedFile(path);
                     setResolvingFile(null);
                   }
                 }}

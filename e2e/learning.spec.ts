@@ -248,3 +248,105 @@ test('mock PR cannot merge until both approval and CI pass', async ({ page }) =>
   await run(page, 'gh pr merge 1 --merge');
   await expect(page.getByText('Level Completed!', { exact: true })).toBeVisible();
 });
+
+test('preview follows edits, branch changes, deletion and renaming', async ({ page }) => {
+  await page.goto('/game');
+  await choose(page, '基本操作', 'Level 1-3');
+  await run(page, 'git add .');
+  await run(page, 'git commit -m "Initial"');
+  await page.getByRole('button', { name: 'README.mdを開く' }).click();
+  const original = await page.locator('pre').textContent();
+  await run(page, 'git switch -c preview-branch');
+  await run(page, 'echo "updated preview" > README.md');
+  await expect(page.locator('pre')).toHaveText('updated preview');
+  await run(page, 'git add .');
+  await run(page, 'git commit -m "Update"');
+  await run(page, 'git switch main');
+  await expect(page.locator('pre')).toHaveText(original!);
+  await run(page, 'git switch preview-branch');
+  await expect(page.locator('pre')).toHaveText('updated preview');
+  await run(page, 'rm README.md');
+  await expect(page.getByText('このファイルは現在の作業ツリーにありません。', { exact: true })).toBeVisible();
+  await expect(page.locator('pre')).toHaveCount(0);
+  await run(page, 'echo "recreated" > README.md');
+  await expect(page.locator('pre')).toHaveText('recreated');
+  await run(page, 'git add .');
+  await run(page, 'git commit -m "Recreate"');
+  await run(page, 'git mv README.md renamed.md');
+  await expect(page.getByText('このファイルは現在の作業ツリーにありません。', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Close preview' }).click();
+  await page.getByRole('button', { name: 'renamed.mdを開く' }).click();
+  await expect(page.locator('pre')).toHaveText('recreated');
+});
+
+test('deleted files stay visible before and after staging', async ({ page }) => {
+  await page.goto('/game');
+  await choose(page, '基本操作', 'Level 1-3');
+  await run(page, 'git add .');
+  await run(page, 'git commit -m "Initial"');
+  await run(page, 'rm README.md');
+  const file = page.getByRole('button', { name: 'README.mdを開く' });
+  await expect(file).toBeVisible();
+  await expect(file).toContainText('削除（未stage）');
+  await run(page, 'git add .');
+  await expect(file).toContainText('削除（stage済み）');
+  await run(page, 'git commit -m "Delete"');
+  await expect(file).toHaveCount(0);
+});
+
+test('special folder and filenames can be expanded and previewed', async ({ page }) => {
+  await page.goto('/game');
+  for (const path of ['constructor/file.txt', 'toString/file.txt', '__proto__/file.txt', '日本語/空 白.txt', '-file.txt']) {
+    await run(page, `echo "content for ${path}" > "${path}"`);
+  }
+  await run(page, 'git add .');
+  await run(page, 'git commit -m "Special names"');
+  for (const path of ['constructor/file.txt', 'toString/file.txt', '__proto__/file.txt', '日本語/空 白.txt', '-file.txt']) {
+    if (path.includes('/')) await page.getByRole('button', { name: `${path.split('/')[0]}フォルダ` }).click();
+    await page.getByRole('button', { name: `${path}を開く` }).click();
+    await expect(page.locator('pre')).toHaveText(`content for ${path}`);
+    await page.getByRole('button', { name: 'Close preview' }).click();
+  }
+  await noPageOverflow(page);
+});
+
+test('switch HEAD stays attached and explains how to detach explicitly', async ({ page }) => {
+  await page.goto('/game');
+  await choose(page, '履歴整理・対話的rebase', '修正コミットを吸収');
+  await run(page, 'git switch HEAD');
+  const graph = page.getByRole('region', { name: 'コミットグラフ' });
+  await expect(graph.locator('text').filter({ hasText: /^main \(HEAD\)$/ })).toBeVisible();
+  await run(page, 'git switch --detach HEAD');
+  await expect(graph.locator('text').filter({ hasText: /^HEAD$/ })).toBeVisible();
+});
+
+test('staged and unstaged changes are both visible in the file list', async ({ page }) => {
+  await page.goto('/game');
+  await choose(page, '基本操作', 'Level 1-3');
+  await run(page, 'git add .');
+  await run(page, 'git commit -m "Initial"');
+  await run(page, 'echo "staged" > README.md');
+  await run(page, 'git add README.md');
+  await run(page, 'echo "" > README.md');
+  const file = page.getByRole('button', { name: 'README.mdを開く' });
+  await expect(file).toContainText('変更（stage済み）');
+  await expect(file).toContainText('変更（未stage）');
+  await file.click();
+  await expect(page.locator('pre')).toHaveText('');
+  await noPageOverflow(page);
+});
+
+test('changing worktrees closes the preview and shows the destination content', async ({ page }) => {
+  await page.goto('/game');
+  await choose(page, '並行作業・特殊構成', '別worktreeで緊急修正');
+  await run(page, 'git worktree add -b hotfix ../hotfix main');
+  await page.getByRole('button', { name: 'app.tsを開く' }).click();
+  await expect(page.locator('pre')).toHaveText('draft');
+  await run(page, 'cd ../hotfix');
+  await expect(page.getByRole('button', { name: 'Close preview' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'app.tsを開く' }).click();
+  await expect(page.locator('pre')).toHaveText('base');
+  await run(page, 'cd ../project');
+  await page.getByRole('button', { name: 'app.tsを開く' }).click();
+  await expect(page.locator('pre')).toHaveText('draft');
+});

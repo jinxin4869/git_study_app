@@ -1,4 +1,5 @@
 import { CommandResult, GitState } from '@/types/git';
+import { dictionary, cloneGitData } from './git-state';
 
 // These commands change only the exercise's in-memory mock GitHub repository.
 export function githubCommand(state: GitState, args: string[], simulated: boolean): CommandResult {
@@ -10,7 +11,7 @@ export function githubCommand(state: GitState, args: string[], simulated: boolea
     const at = args.indexOf(name);
     return at < 0 ? undefined : args[at + 1];
   };
-  const success = (message: string): CommandResult => ({ success: true, message, newState: JSON.parse(JSON.stringify(state)) });
+  const success = (message: string): CommandResult => ({ success: true, message, newState: cloneGitData(state) });
   if (!simulated && args[0] !== 'pr') return fail('対応コマンド: gh pr create/view/checks/merge/close');
   const action = simulated ? args[0] : args[1];
   if (action === 'create' && !simulated) {
@@ -76,7 +77,7 @@ export function githubCommand(state: GitState, args: string[], simulated: boolea
   const original = server.commits[common].tree;
   const ours = server.commits[baseId].tree;
   const theirs = server.commits[latest].tree;
-  const tree: Record<string, string> = {};
+  const tree = dictionary<string>();
   for (const path of new Set([...Object.keys(original), ...Object.keys(ours), ...Object.keys(theirs)])) {
     if (ours[path] !== theirs[path] && ours[path] !== original[path] && theirs[path] !== original[path]) return fail('競合があります。ローカルでbaseを統合・解消してpushしてください。');
     const content = ours[path] === original[path] ? theirs[path] : ours[path];

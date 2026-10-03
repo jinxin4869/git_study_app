@@ -1,11 +1,12 @@
 import { GitState, CommandResult, Commit, FileChange } from '@/types/git';
 import { generateDiff } from '@/utils/diff-utils';
-import { headTree, indexTree, sameTree, cleanTrackedFiles, inSparseScope, sparseTree, untrackedFiles } from './git-state';
+import { headTree, indexTree, sameTree, cleanTrackedFiles, inSparseScope, sparseTree, untrackedFiles, dictionary, cloneGitData, normalizeGitData } from './git-state';
 import { githubCommand } from './github-simulator';
 import { copyHistory, isAncestor, resolveRevision } from './revisions';
 import { advancedCommand } from './advanced-simulator';
 import { isIgnored } from './gitignore';
 import { diffLines } from 'diff';
+import { fileStates } from './file-states';
 
 export interface ConflictResolutionSession {
   path: string;
@@ -22,7 +23,7 @@ export class GitEngine {
   private revision = 0;
 
   constructor(initialState?: GitState) {
-    this.state = initialState ? JSON.parse(JSON.stringify(initialState)) : this.createInitialState();
+    this.state = cloneGitData(initialState ?? this.createInitialState());
   }
 
   /**
@@ -30,16 +31,16 @@ export class GitEngine {
    */
   private createInitialState(): GitState {
     return {
-      commits: {},
-      branches: { main: '' }, // 'main' ブランチは存在するが、初期状態では何も指していない
+      commits: dictionary(),
+      branches: dictionary({ main: '' }), // 'main' ブランチは存在するが、初期状態では何も指していない
       HEAD: { type: 'branch', value: 'main' },
-      index: {},
-      workingDirectory: {},
+      index: dictionary(),
+      workingDirectory: dictionary(),
       detachedHead: false,
       stash: [],
-      remotes: {},
-      remoteBranches: {},
-      mockServers: {},
+      remotes: dictionary(),
+      remoteBranches: dictionary(),
+      mockServers: dictionary(),
     };
   }
 
@@ -47,14 +48,14 @@ export class GitEngine {
    * Returns a deep copy of the current state.
    */
   public getState(): GitState {
-    return JSON.parse(JSON.stringify(this.state));
+    return cloneGitData(this.state);
   }
 
   /**
    * Loads a new state into the engine.
    */
   public loadState(newState: GitState) {
-    this.state = JSON.parse(JSON.stringify(newState));
+    this.state = cloneGitData(newState);
     this.revision++;
   }
 
@@ -99,9 +100,11 @@ export class GitEngine {
       if (!this.state.reflog) this.state.reflog = previousId ? [{ id: previousId, command: 'initial state' }] : [];
       this.state.reflog.unshift({ id: currentId, command });
     }
+    // Normalize dictionaries introduced by commands before exposing the next snapshot.
+    this.state = normalizeGitData(this.state);
     if (result.newState) {
       const untracked = untrackedFiles(this.state);
-      this.state.workingDirectory = { ...sparseTree(this.state, this.state.workingDirectory), ...untracked };
+      this.state.workingDirectory = dictionary({ ...sparseTree(this.state, this.state.workingDirectory), ...untracked });
       result.newState = this.getState();
     }
     // Read-only and rejected commands retain decisions; any state change invalidates old drafts.
@@ -175,10 +178,10 @@ export class GitEngine {
         const name = Object.keys(this.state.remotes).find(remote => this.state.remotes[remote] === args[0]);
         const server = name ? this.state.mockServers[name] : undefined;
         if (!server?.branches.main) return { success: false, message: '模擬環境に登録されたURLを指定してください。' };
-        const servers = JSON.parse(JSON.stringify(this.state.mockServers));
+        const servers = cloneGitData(this.state.mockServers);
         this.state = this.createInitialState();
         this.state.remotes.origin = args[0];
-        this.state.mockServers = { ...servers, origin: JSON.parse(JSON.stringify(server)) };
+        this.state.mockServers = dictionary({ ...servers, origin: cloneGitData(server) });
         this.fetch(['origin']);
         this.state.branches.main = server.branches.main;
         this.state.workingDirectory = { ...this.state.commits[server.branches.main].tree };
@@ -231,15 +234,7 @@ export class GitEngine {
       case 'checkout':
         return this.checkout(args);
       case 'switch':
-        if (args.includes('--track')) {
-          const ref = args[args.indexOf('--track') + 1];
-          const name = args.includes('-c') ? args[args.indexOf('-c') + 1] : ref?.split('/').slice(1).join('/');
-          if (!ref || !name || !this.state.remoteBranches[ref]) return { success: false, message: 'Fetch the remote branch, then specify --track <remote/branch>.' };
-          const result = this.checkout(['-b', name, ref]);
-          if (result.success) this.state.upstreams = { ...this.state.upstreams, [name]: ref };
-          return result;
-        }
-        return this.checkout(args[0] === '-c' ? ['-b', ...args.slice(1)] : args);
+        return this.switchBranch(args);
       case 'restore':
         return this.restore(args);
       case 'rm':
@@ -289,7 +284,7 @@ export class GitEngine {
 
     // モードに基づいてインデックスとワーキングディレクトリを更新
     if (mode === 'soft') {
-      this.state.index = {};
+      this.state.index = dictionary();
       for (const path of new Set([...Object.keys(targetCommit.tree), ...Object.keys(originalIndex)])) {
         this.state.index[path] = originalIndex[path] === undefined
           ? { path, status: 'deleted' }
@@ -300,10 +295,10 @@ export class GitEngine {
     } else if (mode === 'mixed') {
       // Mixed reset: HEAD移動、インデックスはHEADに合わせてリセット、WDは変更なし。
       // インデックス（現在はHEAD）とWDの間の変更は「未ステージ」となる。
-      this.state.index = {}; // 簡易化: インデックスをクリアすることで、このモデルでは実質的にHEADと一致させる
+      this.state.index = dictionary(); // 簡易化: インデックスをクリアすることで、このモデルでは実質的にHEADと一致させる
     } else if (mode === 'hard') {
       // Hard reset: HEAD移動、インデックスとWDもHEADに合わせてリセット。
-      this.state.index = {};
+      this.state.index = dictionary();
       const untracked = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => originalIndex[path] === undefined && targetCommit.tree[path] === undefined));
       this.state.workingDirectory = { ...targetCommit.tree, ...untracked };
     }
@@ -330,9 +325,9 @@ export class GitEngine {
       if (!changed) return { success: false, message: 'No local changes to save.' };
       const at = args.indexOf('-m');
       const message = at >= 0 ? args[at + 1] : action === 'save' ? args.slice(1).join(' ') : `WIP on ${this.state.HEAD.value}`;
-      this.state.stash.push({ id: Math.random().toString(36).slice(2, 9), message: message || 'WIP', baseTree: { ...head }, index: JSON.parse(JSON.stringify(this.state.index)), workingDirectory: saved, timestamp: Date.now() });
+      this.state.stash.push({ id: Math.random().toString(36).slice(2, 9), message: message || 'WIP', baseTree: { ...head }, index: cloneGitData(this.state.index), workingDirectory: saved, timestamp: Date.now() });
       const preserved = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => !shouldSave(path)));
-      this.state.index = {};
+      this.state.index = dictionary();
       this.state.workingDirectory = { ...head, ...preserved };
       return { success: true, message: 'Saved changes.', newState: this.getState() };
     }
@@ -354,12 +349,12 @@ export class GitEngine {
     }
     if (action !== 'pop' && action !== 'apply') return { success: false, message: 'Supported: stash push/list/show/apply/pop/drop' };
     if (!cleanTrackedFiles(this.state)) return { success: false, message: 'Commit or stash current changes before applying.' };
-    const snapshot = (tree: Record<string, string>): Commit => ({ id: 'stash-snapshot', tree, parents: [], message: 'stash', author: 'User', changes: [], timestamp: 0 });
+    const snapshot = (tree: Record<string, string>): Commit => ({ id: 'stash-snapshot', tree: dictionary(tree), parents: [], message: 'stash', author: 'User', changes: [], timestamp: 0 });
     const hidden = Object.fromEntries(Object.entries(head).filter(([path]) => !inSparseScope(this.state, path)));
     const merged = this.performThreeWayMerge(snapshot(original), snapshot({ ...hidden, ...this.state.workingDirectory }), snapshot(entry.workingDirectory));
     this.state.workingDirectory = merged.tree;
     if (merged.hasConflict) return { success: false, message: 'Stash conflict: resolve the files; the stash has been kept.', newState: this.getState() };
-    this.state.index = args.includes('--index') ? JSON.parse(JSON.stringify(Object.fromEntries(Object.entries(entry.index).filter(([path, file]) => file.status === 'deleted' || file.content !== original[path])))) : {};
+    this.state.index = args.includes('--index') ? cloneGitData(Object.fromEntries(Object.entries(entry.index).filter(([path, file]) => file.status === 'deleted' || file.content !== original[path]))) : dictionary();
     if (action === 'pop') this.state.stash.splice(index, 1);
     return { success: true, message: 'Applied stash changes.', newState: this.getState() };
   }
@@ -370,7 +365,7 @@ export class GitEngine {
     if (action === 'add') {
       if (!name || !value || this.state.remotes[name]) return { success: false, message: 'Specify a new remote name and URL.' };
       this.state.remotes[name] = value;
-      this.state.mockServers[name] ??= { branches: {}, commits: {} };
+      this.state.mockServers[name] ??= { branches: dictionary(), commits: dictionary() };
     } else if (action === 'set-url') {
       if (!this.state.remotes[name] || !value) return { success: false, message: 'Remote not found or URL missing.' };
       this.state.remotes[name] = value;
@@ -396,7 +391,7 @@ export class GitEngine {
     if (!server || !this.state.remotes[remoteName]) return { success: false, message: `Unknown remote: ${remoteName}` };
     if (args.includes('--tags') || (branch && this.state.tags?.[branch] && !this.state.branches[branch])) {
       const tags = args.includes('--tags') ? Object.entries(this.state.tags ?? {}) : [[branch!, this.state.tags![branch!]]] as [string, { commitId: string; message?: string }][];
-      server.tags ??= {};
+      server.tags ??= dictionary();
       if (tags.some(([name, tag]) => server.tags![name] && server.tags![name].commitId !== tag.commitId && !force)) return { success: false, message: 'Remote tag already exists.' };
       for (const [name, tag] of tags) { copyHistory(this.state.commits, server.commits, tag.commitId); server.tags[name] = { ...tag }; }
       return { success: true, message: 'Pushed tags to mock remote.', newState: this.getState() };
@@ -431,7 +426,7 @@ export class GitEngine {
     }
     for (const [name, tag] of Object.entries(server.tags ?? {})) {
       copyHistory(server.commits, this.state.commits, tag.commitId);
-      this.state.tags ??= {};
+      this.state.tags ??= dictionary();
       this.state.tags[name] ??= { ...tag };
     }
     if (args.includes('--prune')) {
@@ -512,7 +507,7 @@ export class GitEngine {
       
       // WD/Indexを更新
       const newCommit = this.state.commits[targetCommitId];
-      this.state.index = {};
+      this.state.index = dictionary();
       this.state.workingDirectory = { ...newCommit.tree, ...untracked };
       
       return { success: true, message: `Updating ${currentHeadId.substring(0,7)}..${targetCommitId.substring(0,7)}\nFast-forward`, newState: this.state };
@@ -533,8 +528,8 @@ export class GitEngine {
     ]);
 
     let hasConflict = false;
-    const newIndex: Record<string, FileChange> = {};
-    const newWD: Record<string, string> = {};
+    const newIndex = dictionary<FileChange>();
+    const newWD = dictionary<string>();
 
     for (const file of allFiles) {
       const baseContent = baseCommit.tree[file];
@@ -602,7 +597,7 @@ export class GitEngine {
       } else {
         this.state.HEAD.value = commitId;
       }
-      this.state.index = {}; // インデックスをクリーンにする
+      this.state.index = dictionary(); // インデックスをクリーンにする
       
       return { success: true, message: commitMsg, newState: this.state };
     }
@@ -712,7 +707,7 @@ export class GitEngine {
     };
     if (this.state.HEAD.type === 'branch') this.state.branches[this.state.HEAD.value] = commitId;
     else this.state.HEAD.value = commitId;
-    this.state.index = {};
+    this.state.index = dictionary();
     delete this.state.pendingMerge;
     return { success: true, message: `[${this.state.HEAD.value}] ${message}`, newState: this.getState() };
   }
@@ -724,19 +719,16 @@ export class GitEngine {
         '--show-stash', '--ignore-submodules', '--column', '--no-column', '--ahead-behind', '--no-ahead-behind', '--verbose', '-v',
       ]);
     }
-    const head = headTree(this.state);
-    const index = indexTree(this.state);
-    const working = this.state.workingDirectory;
-    const paths = [...new Set([...Object.keys(head), ...Object.keys(index), ...Object.keys(working)])].filter(path => inSparseScope(this.state, path));
-    const staged = paths.filter(path => head[path] !== index[path]);
-    const modified = paths.filter(path => index[path] !== undefined && index[path] !== working[path]);
-    const untracked = paths.filter(path => index[path] === undefined && working[path] !== undefined && !isIgnored(this.state, path));
-    const ignored = paths.filter(path => index[path] === undefined && working[path] !== undefined && isIgnored(this.state, path));
+    const files = fileStates(this.state);
+    const staged = files.filter(file => file.staged);
+    const modified = files.filter(file => file.unstaged);
+    const untracked = files.filter(file => file.untracked);
+    const ignored = files.filter(file => file.ignored);
     const lines = [this.state.HEAD.type === 'branch' ? `On branch ${this.state.HEAD.value}` : `HEAD detached at ${this.state.HEAD.value}`];
-    if (staged.length) lines.push('Changes to be committed:', ...staged.map(path => `  ${index[path] === undefined ? 'deleted' : 'staged'}: ${path}`));
-    if (modified.length) lines.push('Changes not staged for commit:', ...modified.map(path => `  ${working[path] === undefined ? 'deleted' : 'modified'}: ${path}`));
-    if (untracked.length) lines.push('Untracked files:', ...untracked.map(path => `  ${path}`));
-    if (args.includes('--ignored') && ignored.length) lines.push('Ignored files:', ...ignored.map(path => `  ${path}`));
+    if (staged.length) lines.push('Changes to be committed:', ...staged.map(file => `  ${file.staged === 'deleted' ? 'deleted' : 'staged'}: ${file.path}`));
+    if (modified.length) lines.push('Changes not staged for commit:', ...modified.map(file => `  ${file.unstaged === 'deleted' ? 'deleted' : 'modified'}: ${file.path}`));
+    if (untracked.length) lines.push('Untracked files:', ...untracked.map(file => `  ${file.path}`));
+    if (args.includes('--ignored') && ignored.length) lines.push('Ignored files:', ...ignored.map(file => `  ${file.path}`));
     if (!staged.length && !modified.length && !untracked.length) lines.push('nothing to commit, working tree clean');
     return { success: true, message: lines.join('\n') };
   }
@@ -784,7 +776,7 @@ export class GitEngine {
 
   private configure(args: string[]): CommandResult {
     const values = args.filter(arg => !['--global', '--local'].includes(arg));
-    this.state.config ??= {};
+    this.state.config ??= dictionary();
     if (values[0] === '--list') return { success: true, message: Object.entries(this.state.config).map(([key, value]) => `${key}=${value}`).join('\n') };
     const [key, value] = values;
     if (!key) return { success: false, message: 'git config <key> [value]' };
@@ -794,7 +786,7 @@ export class GitEngine {
   }
 
   private tag(args: string[]): CommandResult {
-    this.state.tags ??= {};
+    this.state.tags ??= dictionary();
     if (!args.length) return { success: true, message: Object.keys(this.state.tags).sort().join('\n') };
     if (args[0] === '-d') {
       if (!this.state.tags[args[1]]) return { success: false, message: 'Tag not found.' };
@@ -884,12 +876,47 @@ export class GitEngine {
     return { success: true, message: '', newState: this.getState() };
   }
 
+  private switchBranch(args: string[]): CommandResult {
+    let create: string | undefined;
+    let detach = false;
+    let track = false;
+    let pathsOnly = false;
+    const targets: string[] = [];
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      if (!pathsOnly && arg === '--') pathsOnly = true;
+      else if (!pathsOnly && ['-c', '--create'].includes(arg)) {
+        if (create !== undefined || !args[i + 1] || args[i + 1].startsWith('-')) return { success: false, message: 'git switch -c <new-branch> [start-point]' };
+        create = args[++i];
+      } else if (!pathsOnly && ['-d', '--detach'].includes(arg)) detach = true;
+      else if (!pathsOnly && ['-t', '--track'].includes(arg)) track = true;
+      else if (!pathsOnly && arg.startsWith('-')) return this.unsupportedArgument('switch', arg, '<branch>, -c <new-branch> [start-point], --detach [commit], --track <remote/branch>', ['-C', '--force-create', '-f', '--force', '--discard-changes', '--orphan', '--guess', '--no-guess', '--merge']);
+      else targets.push(arg);
+    }
+    if (targets.length > 1 || (detach && (create !== undefined || track))) return { success: false, message: 'Specify one target and choose either a branch or --detach.' };
+    const target = targets[0];
+    if (track) {
+      const name = create ?? target?.split('/').slice(1).join('/');
+      if (!target || !name || !Object.hasOwn(this.state.remoteBranches, target)) return { success: false, message: 'Fetch the remote branch, then specify --track <remote/branch>.' };
+      const result = this.checkout(['-b', name, target]);
+      if (result.success) this.state.upstreams = dictionary({ ...this.state.upstreams, [name]: target });
+      return result;
+    }
+    if (create !== undefined) return this.checkout(['-b', create, target ?? 'HEAD']);
+    if (detach) return this.checkout(['--detach', target ?? 'HEAD']);
+    if (!target) return { success: false, message: 'git switch <branch> or git switch --detach <commit>' };
+    if (!Object.hasOwn(this.state.branches, target)) return { success: false, message: `git switch: a local branch is required: ${target}\nコミットを調べるには git switch --detach ${target} を使ってください。` };
+    return this.checkout([target]);
+  }
+
   private checkout(args: string[]): CommandResult {
     if (args.length === 0) {
       return { success: false, message: 'checkout: missing argument' };
     }
 
     let target = args[0];
+    // checkout HEAD retains an attached branch; expressions such as HEAD~0 detach.
+    if (target === 'HEAD' && this.state.HEAD.type === 'branch') target = this.state.HEAD.value;
     let createBranch = false;
     const detached = target === '--detach';
     if (detached) target = args[1] ?? 'HEAD';
@@ -921,11 +948,11 @@ export class GitEngine {
         }
       }
     }
-    const preserved = { ...this.state.workingDirectory };
-    const preservedIndex = { ...this.state.index };
+    const preserved = dictionary(this.state.workingDirectory);
+    const preservedIndex = dictionary(this.state.index);
     const carryChanges = (tree: Record<string, string>) => {
-      this.state.workingDirectory = { ...tree };
-      this.state.index = {};
+      this.state.workingDirectory = dictionary(tree);
+      this.state.index = dictionary();
       for (const path of new Set([...Object.keys(previousTree), ...Object.keys(currentIndex), ...Object.keys(preserved)])) {
         if (!inSparseScope(this.state, path)) continue;
         if (currentIndex[path] !== previousTree[path] || preserved[path] !== currentIndex[path]) {
@@ -936,7 +963,7 @@ export class GitEngine {
       }
     };
     // Switch to branch
-    if (!detached && this.state.branches[target]) {
+    if (!detached && Object.hasOwn(this.state.branches, target)) {
       this.state.HEAD = { type: 'branch', value: target };
       this.state.detachedHead = false;
       
@@ -1152,7 +1179,7 @@ export class GitEngine {
       const untracked = Object.fromEntries(Object.entries(this.replayUntrackedFiles()).filter(([path]) => headTree(pending.original)[path] === undefined));
       const commits = this.state.commits;
       const reflog = this.state.reflog;
-      this.state = JSON.parse(JSON.stringify(pending.original));
+      this.state = cloneGitData(pending.original);
       this.state.workingDirectory = { ...this.state.workingDirectory, ...untracked };
       this.state.commits = { ...commits, ...this.state.commits };
       this.state.reflog = reflog;
@@ -1190,7 +1217,7 @@ export class GitEngine {
         if (!result.success) return result;
       } else {
         this.state.workingDirectory = { ...headTree(this.state), ...this.replayUntrackedFiles() };
-        this.state.index = {};
+        this.state.index = dictionary();
       }
       pending.remaining.shift();
       delete pending.current;
@@ -1222,7 +1249,7 @@ export class GitEngine {
       if (Object.keys(untracked).some(path => this.state.commits[target].tree[path] !== undefined)) return { success: false, message: 'Untracked files would be overwritten.' };
       this.state.branches[this.state.HEAD.value] = target;
       this.state.workingDirectory = { ...this.state.commits[target].tree, ...untracked };
-      this.state.index = {};
+      this.state.index = dictionary();
       if (remaining.length === 0 && !interactive) return { success: true, message: 'Fast-forward.', newState: this.getState() };
     } else {
       const resolved = targets.map(arg => resolveRevision(this.state, arg));
@@ -1253,7 +1280,7 @@ export class GitEngine {
       const amend = action === 'squash' || action === 'fixup';
       const message = operation.kind === 'revert' ? `Revert "${source.message}"` : action === 'fixup' ? ours.message : action === 'squash' ? `${ours.message}\n\n${source.message}` : source.message;
       this.state.workingDirectory = { ...result.tree, ...untracked };
-      this.state.index = {};
+      this.state.index = dictionary();
       for (const path of new Set([...Object.keys(ours.tree), ...Object.keys(result.tree)])) {
         const content = result.tree[path];
         if (content?.includes('<<<<<<< HEAD')) continue;
@@ -1276,7 +1303,7 @@ export class GitEngine {
     }
     const kind = operation.kind;
     delete this.state.operation;
-    this.state.index = {};
+    this.state.index = dictionary();
     return { success: true, message: kind === 'rebase' ? 'Successfully rebased.' : `Completed ${kind}: ${this.state.commits[this.resolveHeadCommitId()!]?.message}`, newState: this.getState() };
   }
 
@@ -1287,7 +1314,7 @@ export class GitEngine {
       ...Object.keys(theirs.tree)
     ]);
 
-    const newTree: Record<string, string> = {};
+    const newTree = dictionary<string>();
     let hasConflict = false;
 
     for (const file of allFiles) {
