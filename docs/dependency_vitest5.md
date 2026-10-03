@@ -1,0 +1,39 @@
+# Vitest 5更新PRの修正（2026-10-03）
+
+対象: [PR #10](https://github.com/jinxin4869/git_study_app/pull/10)。基点はmain `38ed23d`（PR #7/#12取込済み）。最新mainをmergeし、既存の学習体験修正と依存更新を保持した。
+
+## 原因と変更（初回修正）
+
+元のPRは `npm ci` でERESOLVEになった。Vitest 5.0.2の任意peer `@types/node` が22系以上を要求する一方、アプリが20系を指定していたため、任意peerをインストールした構成として不整合だった。
+
+- `@types/node` を22系へそろえ、lockfileを通常のnpm依存解決で生成する。
+- アプリのNode enginesとREADMEを `^22.12.0 || ^24.0.0 || >=26.0.0` にそろえる。Node 20でVitest 5を実行できるとは案内しない。CIは引き続きNode 22を使う。
+- Vite 7を維持する。テストの期待値・除外・mock設定・再試行設定は変更しない。
+
+[公式Vitest 5移行資料](https://vitest.dev/guide/migration/)と対象パッケージのnpm engines/peerDependenciesを確認した。`--force`・`--legacy-peer-deps` は使わない。元の621件はVitest 5の新しい既定値でも成功した。
+
+## 検証
+
+Ubuntu 22.04 / Node 22.22.1で、lint、型チェック、Vitest 5のunit621件（25ファイル）、Next本番build、`npm ls --all` が成功。既存の実Git比較・特殊名・状態保持テストを維持する。
+
+最終コミットの `npm ci` とChromium4サイズ/Firefox/WebKitのE2Eは [PR checks](https://github.com/jinxin4869/git_study_app/pull/10/checks) とPR本文に記録する。
+
+npm 11.21.0での全依存監査はHigh 5件（終了1）。対象は既存のNext lint → fast-glob → micromatch → braces経路で、新しい警告はない。ESLint 9のdeprecatedと未修正版bracesの警告は別課題。本PRのmainマージと本番公開は行っていない。
+
+## main更新後の競合解消（2026-10-03）
+
+PR #8/#11のマージ後のmain `f923cd2` を取り込み、package.jsonとpackage-lock.jsonの競合を解消した。Vite 8.3.1、Lucide 1.49.0、Oxcのautomatic JSX変換とvitest.config.mtsを保持する。
+
+本PRのVitest 5.0.2、Node 22型定義、Node engines/READMEの対応範囲を保持する。初回修正時のVite 7維持は履歴であり、今回からmainのVite 8と併用する。意図しないVitest 5.0.3への更新は行っていない。
+
+最新mainのlockfileを基点にnpm 11.21.0で通常のpeer解決により再生成した。npm ci、lint、型チェック、unit621件（25ファイル）、npm ls --allが成功。競合マーカーや未解消ファイルを残さず、peer無視・履歴書換え・検査無効化は行わない。
+
+この再同期の最終コミットに対するbuild/E2E/Previewと対象SHAは [PR checks](https://github.com/jinxin4869/git_study_app/pull/10/checks) とPR本文を参照する。初回CI成功記録とは区別する。mainへのマージと本番公開は行っていない。
+
+## TypeScript PRマージ後の最終同期（2026-10-04）
+
+PR #9取込後のmain `2b3e814` をmergeした。package.jsonではVitest 5.0.2指定とTypeScript native aliasの追加が競合したため、Vitest 5を保持しながらmainのTypeScript 7 CLI/TypeScript 6 API併用を取り込んだ。CSS型宣言、Vite 8.3.1/Oxc設定、Lucide 1.49.0、Node 22型定義/enginesも維持する。
+
+package-lock.jsonはGitの自動merge結果がmanifestと一致し、必要な依存版とmainの本番依存バージョン/integrityを保持することを確認した。今回は追加の依存更新やlockfile再生成を行っていない。クリーンなnpm ci、lint、TypeScript 7の型チェック、Vitest 5のunit621件（25ファイル）、npm ls --allが成功。既存の実Git比較/状態保持/特殊名テストを維持する。
+
+この最終同期のSHAとbuild/E2E/Previewの結果はPR本文と [PR checks](https://github.com/jinxin4869/git_study_app/pull/10/checks) を参照する。前回のCI結果とは分けて記録する。force push、検査の無効化、mainへの直接push、PRマージ、手動deployは行っていない。
