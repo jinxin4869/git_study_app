@@ -95,3 +95,62 @@ test('public authored completion explanation and next lesson work without hints'
   await expect(command(page)).toBeFocused();
   await expect(page.getByRole('heading', { name: 'なぜ達成したか' })).toHaveCount(0);
 });
+
+test('public failed storage reads retain completions and recover on retry', async ({ page }) => {
+  await page.goto('/game'); await choose(page, 'Level 1-3'); await run(page, 'git status');
+  await page.evaluate(() => {
+    const original = Storage.prototype.getItem;
+    Object.defineProperty(window, 'allowRead', { value: false, writable: true });
+    Storage.prototype.getItem = function(key) {
+      if (!(window as unknown as { allowRead: boolean }).allowRead) throw new DOMException('revoked', 'SecurityError');
+      return original.call(this, key);
+    };
+    window.dispatchEvent(new StorageEvent('storage', { key: 'git-learning:v1:complete:level-1-5', storageArea: localStorage }));
+  });
+  await expect(page.getByRole('main').getByRole('alert')).toContainText('保存');
+  await page.getByRole('button', { name: '保存を再試行' }).click();
+  await expect(page.getByRole('button', { name: /Level 1-3/ })).toContainText('完了済み');
+  await page.evaluate(() => { (window as unknown as { allowRead: boolean }).allowRead = true; });
+  await page.getByRole('button', { name: '保存を再試行' }).click();
+  await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Level 1-3/ })).toContainText('完了済み');
+});
+
+test('public invalid merge and ordinary marker text cannot record a conflict achievement', async ({ page }) => {
+  await page.goto('/game'); await choose(page, 'Level 7-1');
+  await run(page, 'git merge feature missing-reference');
+  await run(page, 'echo "<<<<<<< HEAD" > index.html');
+  await expect(page.getByRole('region', { name: '操作中の状態' })).toHaveCount(0);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('list', { name: '達成条件' })).toContainText('未達:');
+  expect(await page.evaluate(() => localStorage.getItem('git-learning:v1:complete:level-7-1'))).toBeNull();
+  await page.getByRole('button', { name: '現在の演習を最初からやり直す' }).click();
+  await run(page, 'git merge feature');
+  await expect(page.getByRole('region', { name: '操作中の状態' })).toContainText('merge 中');
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
+  await expect(page.getByRole('list', { name: '達成条件' })).not.toContainText('未達:');
+});
+
+test('public stash conflict requires resolved contents and staging before achievement', async ({ page }) => {
+  await page.goto('/game'); await choose(page, 'stash復元時の競合');
+  await expect(page.getByRole('heading', { name: '1. 考え方' })).toHaveCount(0);
+  await run(page, 'git stash pop');
+  const guidance = page.getByRole('region', { name: '操作中の状態' });
+  await expect(guidance).toContainText('未解消の競合');
+  await expect(guidance).toContainText('元の保管は残ります');
+  await expect(guidance.getByRole('button', { name: 'git stash --abort' })).toHaveCount(0);
+  await run(page, 'echo "Combined" > app.ts');
+  await expect(guidance).toBeVisible();
+  await expect(page.getByRole('list', { name: '達成条件' })).toContainText('未達:');
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('git-learning:v1:complete:stash-conflict'))).toBeNull();
+  await guidance.getByRole('button', { name: 'git status', exact: true }).click();
+  await command(page).press('Enter');
+  await expect(page.getByRole('region', { name: '端末出力' })).toContainText('Unmerged paths:');
+  await run(page, 'git add app.ts');
+  await expect(guidance).toHaveCount(0);
+  await expect(page.getByRole('list', { name: '達成条件' })).not.toContainText('未達:');
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
+  await run(page, 'git stash list');
+  await expect(page.getByRole('region', { name: '端末出力' })).toContainText('stash@{0}');
+});

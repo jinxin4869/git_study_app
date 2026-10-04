@@ -74,6 +74,8 @@ gh pr merge 1 --merge
 
 マージ後に確認した公開版、保存・競合・引数検証の追加修正と残る制約は [マージ後の再評価記録](docs/post_merge_review.md) を参照してください。ロードマップは末尾の最新節を使用し、以前の分類は調査履歴として残しています。
 
+依存更新PR #7〜11と修正PR #12はmainへ取込済みです。2026-10-04の公開版確認・再監査は [最新の公開確認記録](docs/post_release_verification.md)、未完了の実機IME・読み上げ・Safari等は [実機確認の手順と結果票](docs/manual_device_checks.md) を参照してください。
+
 ## 動作環境
 
 -   Node.js 22.12以上の22系、24系、または26以上（Vitest 5のテストを含む）。CIと同じ22系の最新パッチを推奨します。
@@ -146,6 +148,8 @@ GitHub ActionsではmainへのpushとPRごとに、lint・型チェック・ユ�
 詳細な設計や実装内容については、`docs/` ディレクトリ内のドキュメントを参照してください。
 
 -   [今回の改善と検証](docs/learning_refinements.md): スクロール、全教材レビュー、採点・入力・保存の修正と限界
+-   [最新の公開確認と再監査](docs/post_release_verification.md): 依存更新後の公開SHA、18件の公開テスト、4点の対応状況
+-   [実機確認の手順と結果票](docs/manual_device_checks.md): IME、ソフトキーボード、読み上げ、Safari、ページズームの未検証項目
 -   [公開確認と戻し方](docs/release_runbook.md): PR/本番確認、版付き再現情報、保存互換性、rollback
 -   [実務向けGit学習カリキュラム](docs/practical_git_curriculum.md): 12章の学習順序、139演習の対応状況、7つの総合演習、再現範囲
 -   [画面修正とE2Eテスト](docs/audits/ui_fixes_and_e2e.md): 監査の5項目への対応、28ケースのブラウザテストとCI
