@@ -52,13 +52,15 @@ Ubuntu 22.04、Node 22.22.1 / npm 10.9.4。監査CLIだけnpm 11.21.0を使っ�
 | 本番build | 成功。/game First Load JS 217kB |
 | 公開smoke | 18件成功、再試行0。上記の対象mainに対する結果 |
 | localhost E2E | 230件成功（46フロー×Chromium4サイズ/Firefox、workers 2、retries 0）。保存・採点・操作復旧・axe等の既存回帰を維持 |
-| PR CI | WebKitを含む全6構成276件の結果はPR作成後に確認して追記。標準Ubuntu 24.04環境を使用 |
+| PR CI | [Tests 37208621437](https://github.com/jinxin4869/git_study_app/actions/runs/37208621437)、PR #13のSHA `c75cc24` で成功。lint/type/unit621/build、全6構成E2E276件成功、再試行・flakyなし。標準Ubuntu 24.04環境を使用 |
 | 依存監査 | 本番0件・終了0、全依存High 5件・終了1。APIエラーなし |
 | package/lockfile | `git diff --exit-code origin/main -- package.json package-lock.json`で変更なし |
 
-実機利用の可否は利用者へ確認中。Linuxの表示環境はあるが、実Safari、日本語IME・読み上げソフト、端末接続ツール・USBアクセス、画面を操作するツールがない。実機結果はまだ得られていない。詳細な手順と結果票を用意し、未検証範囲をA02/A09等に残した。
+Linuxの表示環境はあるが、実Safari、日本語IME・読み上げソフト、端末接続ツール・USBアクセス、画面を操作するツールがない。利用可能な担当端末を利用者へ確認したが、実機結果はまだ得られていない。詳細な手順と結果票を用意し、未検証範囲をA02/A09等に残した。
 
 ローカルUbuntu 22.04にはWebKit 2359のキャッシュがあるが、従来使用した一時OS依存/ランチャーがない。ローカルで実行可能なChromium/Firefoxを確認し、WebKitは既存CIのUbuntu 24.04と `playwright install --with-deps` の標準環境で検証する。テストをskipしたりCI検査を無効化したりしない。
+
+変更は[PR #13](https://github.com/jinxin4869/git_study_app/pull/13)。上記CI成功後の追記は記録と実機手順のみで、検証対象のテスト/アプリ/依存は変更していない。最新HEADのchecksは[PR checks](https://github.com/jinxin4869/git_study_app/pull/13/checks)も参照する。コミットとpushは作業ブランチへ行い、mainへのマージ・手動公開は行わない。
 
 ## 継続する条件
 
