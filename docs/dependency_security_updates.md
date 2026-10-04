@@ -99,6 +99,8 @@ CI run [37104472184](https://github.com/jinxin4869/git_study_app/actions/runs/37
 
 ## PR #6マージ後の再監査（2026-10-03 JST、基点 `cd3272d`）
 
+この節のPRレビュー待ちは当時の履歴。取込後の再監査は末尾の2026-10-04節を参照する。
+
 公開mainのlockfileを維持して再監査した。npm 10.9.4の全依存監査はHigh 5件・終了コード1。本番監査はbulk endpointの後のquick endpointでHTTP 400（deprecated endpoint）となり、**この失敗から本番0件とは判定しなかった**。監査用CLIのみnpm 11.21.0へ切り替え、以下を再実行した。アプリのpackage.json/lockfileは変更していない。
 
 ```bash
@@ -121,3 +123,50 @@ npm registryのpeerDependenciesも再確認した。eslint-plugin-react 7.37.5�
 | [#11](https://github.com/jinxin4869/git_study_app/pull/11) | lucide-react 0.x→1.xのmajor | アイコンAPIとUIの互換性を別レビュー |
 
 新しいmain/採用した依存PRの監査はその対象SHAで再実行する。既存PRのmerge、main直接push、手動deployは行っていない。
+
+## 依存更新PR取込後の再監査（2026-10-04 JST）
+
+対象 `4c119178b2f1df4fffc4382edf409c9abe12e2bb`。既存依存PRはすべてマージ済みであり、上のレビュー待ちは現在の残作業ではない。GitHubのマージ記録で確認した。
+
+| PR | 取込SHA | 現在の対応範囲 |
+| --- | --- | --- |
+| [#7](https://github.com/jinxin4869/git_study_app/pull/7) | `40dd35f` | 互換依存8更新、axe-core 4.13.0等 |
+| [#8](https://github.com/jinxin4869/git_study_app/pull/8) | `e0912cd` | Vite 8.3.1、ESMのVitest設定へ対応 |
+| [#11](https://github.com/jinxin4869/git_study_app/pull/11) | `f923cd2` | lucide-react 1.49.0、既存アイコンAPI維持 |
+| [#9](https://github.com/jinxin4869/git_study_app/pull/9) | `2b3e814` | TypeScript 7.0.2のnative CLIと互換API 6系を併用 |
+| [#10](https://github.com/jinxin4869/git_study_app/pull/10) | `4c11917` | Vitest 5.0.2。Node要件・Oxc JSX変換・競合差分を修正 |
+
+`typescript`名のnpm aliasはAPI用 `@typescript/typescript6`、`@typescript/native`名のaliasはCLI用 `typescript@7`。native CLIへ切り替えても、Next.js・ESLint等が読み込むAPIの互換性は別に確認する。Vitestでは自動JSX変換を設定し、Next.jsのjsx設定は維持した。対象mainの[CI 37134560373](https://github.com/jinxin4869/git_study_app/actions/runs/37134560373)は成功。今回もunit621件、lint・typecheck・buildと[公開smoke18件](post_release_verification.md)が成功した。
+
+### 監査と残る条件
+
+ユーザーの既存送信許可に基づき、npm 11.21.0 CLIで公開npmへ再監査した。JSONにerrorはなく、本番は0件・終了コード0、全依存はHigh 5件・終了コード1。package.json/lockfileの変更なし。全依存の警告は本番依存の警告とは分ける。
+
+`eslint-config-next@16.3.8 → @next/eslint-plugin-next@16.3.8 → fast-glob@3.3.1 → micromatch@4.0.8 → braces@3.0.3` の開発lint経路。[GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)は対象 `<=3.0.3`、修正版None。npm registryの最新bracesも3.0.3。攻撃者が深く入れ子のbrace patternをこの解析へ渡すと、再帰処理がスタックを枯渇させNodeプロセスを停止させる。ブラウザの演習入力・保存データ・ファイル内容はこのlint glob経路へ渡らない。未修正警告は残し、信頼しないglobを開発toolingで処理する用途が加われば適用条件を再評価する。
+
+以下は当日のnpm registryの最新版とpeerDependencies。ESLint 10はまだ必要な3 pluginの対応範囲にないため、ESLint 9のdeprecated警告は残る。
+
+| plugin | 最新版 | ESLint peerDependencies |
+| --- | --- | --- |
+| eslint-plugin-react | 7.37.5 | `^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9.7` |
+| eslint-plugin-jsx-a11y | 6.10.2 | `^3 || ^4 || ^5 || ^6 || ^7 || ^8 || ^9` |
+| eslint-plugin-import | 2.32.0 | `^2 || ^3 || ^4 || ^5 || ^6 || ^7.2.0 || ^8 || ^9` |
+
+監査のfixAvailableはeslint-config-next 14.2.35へのメジャー変更を示すが、互換性を崩すダウングレードは採用しない。強制peer無視、audit --force、lint/a11y検査の無効化も行わない。F09の既存更新とO04の監査/通知/手順は実施済み、braces修正とESLint 10移行自体は未完了。
+
+### 次回以降の確認
+
+月次Dependabotは既存の `.github/dependabot.yml` で有効。次回月次確認の目安は2026-11、依存PRを取り込んだ時にも以下を実行し、対象SHA・日時・CLI・終了コード・JSON errorの有無・本番/全依存の件数を追記する。監査の通信エラーを0件と扱わない。
+
+```bash
+npm ci --no-audit
+npm exec --yes --package=npm@11.21.0 -- npm audit --omit=dev --json
+npm exec --yes --package=npm@11.21.0 -- npm audit --json
+npm view braces@latest version --json
+npm view eslint-plugin-react@latest version peerDependencies --json
+npm view eslint-plugin-jsx-a11y@latest version peerDependencies --json
+npm view eslint-plugin-import@latest version peerDependencies --json
+npm ls braces --all
+```
+
+bracesの修正版または親依存の修正経路が出た時、ESLint 10を必要なpluginが正式サポートした時に別PRで互換更新を検証する。更新PRはlint・typecheck・unit・build・Chromium4サイズ/Firefox/WebKitのE2Eを通し、公開後に対象SHAを記録して公開smokeを実行する。新たな本番警告や現用途の不具合は月次を待たず対応する。ESLint deprecated警告だけを消すために互換性を壊す更新はしない。
