@@ -540,7 +540,7 @@ function LearningSession() {
         {state.activeWorktree ? <p className="px-4 py-2 text-xs font-mono text-gray-300 break-all border-b border-gray-800">仮想作業場所: {state.activeWorktree}</p> : null}
 
         <div className="min-h-0 flex-1 flex flex-col">
-        <div role={currentScenario || guidance ? 'region' : undefined} aria-label={currentScenario || guidance ? '演習の説明と操作案内' : undefined} tabIndex={currentScenario || guidance ? 0 : undefined} className="min-h-0 max-h-[60%] shrink-0 overflow-auto focus-visible:outline-2 focus-visible:outline-blue-400">
+        <div role={currentScenario || guidance ? 'region' : undefined} aria-label={currentScenario || guidance ? '演習の説明と操作案内' : undefined} tabIndex={currentScenario || guidance ? 0 : undefined} className="min-h-0 max-h-[60%] shrink overflow-auto focus-visible:outline-2 focus-visible:outline-blue-400">
         {/* ターミナル内のシナリオ情報オーバーレイ */}
         {currentScenario && (
           <div className="bg-blue-900/20 border-b border-blue-500/20 p-3 text-sm">
