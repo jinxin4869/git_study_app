@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
 import { GitEngine, type ConflictResolutionSession } from '@/engine/git-simulator';
+import { CommandAssistance } from '@/components/command-assistance';
+import { commandSuggestions } from '@/learning/command-suggestions';
 import { LearningReference } from '@/components/learning-reference';
 import { LearningTransfer } from '@/components/learning-transfer';
 import type { SavedSession } from '@/learning/session-store';
@@ -387,6 +389,10 @@ function LearningSession() {
       if (e.key === 'Enter') e.preventDefault();
       return;
     }
+    if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey && e.currentTarget.selectionStart === input.length && e.currentTarget.selectionEnd === input.length && !/\s$/.test(input)) {
+      const suggestions = commandSuggestions(input, state);
+      if (suggestions.length === 1) { e.preventDefault(); setInput(suggestions[0].value); setHistoryIndex(-1); return; }
+    }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (history.length === 0) return;
@@ -634,6 +640,7 @@ function LearningSession() {
             />
           </div>
         </form>
+          <CommandAssistance key={terminalSession} value={input} history={history} state={state} onSelect={value=>{setInput(value);setHistoryIndex(-1);commandRef.current?.focus();}} />
       </div>
 
       {/* 右パネル: 可視化とファイル */}
