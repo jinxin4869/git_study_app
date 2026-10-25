@@ -10,6 +10,7 @@ import { mergeContent } from './merge-content';
 import { fileStates } from './file-states';
 import { tokenizeCommand, validateCommandOptions, commandHelp } from './command-input';
 import { isUnmerged, hasUnmergedPaths, clearUnmergedPaths } from './conflicts';
+import { newCommitId, uniqueSimulationId } from './simulation-ids';
 
 export interface ConflictResolutionSession {
   path: string;
@@ -358,7 +359,7 @@ export class GitEngine {
       const changed = !sameTree(head, effectiveIndex) || !sameTree(head, saved);
       if (!changed) return { success: false, message: 'No local changes to save.' };
       message ??= action === 'save' ? targets.join(' ') : `WIP on ${this.state.HEAD.value}`;
-      this.state.stash.push({ id: Math.random().toString(36).slice(2, 9), message: message || 'WIP', baseTree: { ...head }, index: cloneGitData(this.state.index), workingDirectory: saved, timestamp: Date.now() });
+      this.state.stash.push({ id: uniqueSimulationId(this.state.stash.map(item => item.id)), message: message || 'WIP', baseTree: { ...head }, index: cloneGitData(this.state.index), workingDirectory: saved, timestamp: Date.now() });
       const preserved = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => !shouldSave(path)));
       this.state.index = dictionary();
       this.state.workingDirectory = { ...head, ...preserved };
@@ -609,7 +610,7 @@ export class GitEngine {
       this.state.index = newIndex;
       const commitMsg = `Merge branch '${targetBranchName}' into ${this.state.HEAD.type === 'branch' ? this.state.HEAD.value : 'HEAD'}`;
       
-      const commitId = Math.random().toString(36).substring(2, 9);
+      const commitId = newCommitId(this.state);
       const newCommit: Commit = {
         id: commitId,
         message: commitMsg,
@@ -743,7 +744,7 @@ export class GitEngine {
       return { success: false, message: 'Resolve and stage all merge changes first.' };
     }
     if (!amend && !this.state.pendingMerge && sameTree(newTree, headTree(this.state))) return { success: false, message: 'nothing to commit' };
-    const commitId = Math.random().toString(36).substring(2, 9);
+    const commitId = newCommitId(this.state);
     this.state.commits[commitId] = {
       id: commitId, message,
       parents: this.state.pendingMerge && parentId ? [parentId, this.state.pendingMerge.targetId] : amend ? previous!.parents : parentId ? [parentId] : [],
