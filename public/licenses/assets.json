@@ -1,0 +1,67 @@
+{
+  "recordedOn": "2026-10-25",
+  "assets": [
+    {
+      "file": "src/app/icon.svg",
+      "sha256": "78e229bb774d7ac0df57dfdd579a59636bf735e04236a62345c5543e121d680f",
+      "creation": "New AI-assisted SVG source authored with Codex; no external artwork imported",
+      "projectLicense": "MIT",
+      "rightsLabel": "Git Learning App Team",
+      "confirmedBy": "repository owner in this session, 2026-10-25"
+    }
+  ],
+  "retired": [
+    {
+      "file": "public/icon.png",
+      "sha256": "ef625ff6194ff773c952edcf69b0e5a388ea7fe3aabfc3e83025a214f3cc5c03",
+      "status": "retired from current distribution; historical bytes remain in Git history"
+    },
+    {
+      "file": "public/next.svg",
+      "sha256": "55995dfad6ecb4945a1e856ddca03c5e16aa5bf13fd21b4df6a74ae79357bcfc",
+      "status": "retired from current distribution; historical bytes remain in Git history"
+    },
+    {
+      "file": "public/vercel.svg",
+      "sha256": "f081337b2fee635b455b63275406a3e7f39d6a014e25ad90dab5a67e62a12ac4",
+      "status": "retired from current distribution; historical bytes remain in Git history"
+    },
+    {
+      "file": "public/file.svg",
+      "sha256": "2b67812c325c199a02536cdbeea0c593a72f707d323b72ee3e08dbab06753bd4",
+      "status": "retired from current distribution; historical bytes remain in Git history"
+    },
+    {
+      "file": "public/globe.svg",
+      "sha256": "b614b9bf183925957661ac851498fe1d8029fd43a62fbfed86f9e2624a57e7cf",
+      "status": "retired from current distribution; historical bytes remain in Git history"
+    },
+    {
+      "file": "public/window.svg",
+      "sha256": "644768c4aaeb4767bce293344eeb0c125fb804a94d801440424072202d85e3a1",
+      "status": "retired from current distribution; historical bytes remain in Git history"
+    },
+    {
+      "file": "src/app/favicon.ico",
+      "sha256": "2b8ad2d33455a8f736fc3a8ebf8f0bdea8848ad4c0db48a2833bd0f9cd775932",
+      "status": "retired from current distribution; historical bytes remain in Git history"
+    }
+  ],
+  "supplemental": [
+    {
+      "file": "public/licenses/supplemental/GPL-3.0.txt",
+      "source": "https://www.gnu.org/licenses/gpl-3.0.txt",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "file": "public/licenses/supplemental/LGPL-3.0.txt",
+      "source": "https://www.gnu.org/licenses/lgpl-3.0.txt",
+      "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+    },
+    {
+      "file": "public/licenses/project-MIT.txt",
+      "source": "LICENSE",
+      "sha256": "c02f0cc6ae0c2293ea47530d87452b9e9372421ab12193c370cf3a0aaa676e2d"
+    }
+  ]
+}

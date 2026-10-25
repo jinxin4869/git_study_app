@@ -25,7 +25,10 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
     "test:e2e:production": "playwright test --config=playwright.production.config.ts",
-    "lab": "node scripts/real-git-lab.mjs"
+    "lab": "node scripts/real-git-lab.mjs",
+    "licenses:inventory": "node scripts/license-inventory.mjs",
+    "licenses:check": "node scripts/license-inventory.mjs --check",
+    "test:licenses": "node --test scripts/license-inventory.test.mjs"
   },
   "dependencies": {
     "@types/diff": "^7.0.2",

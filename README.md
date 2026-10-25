@@ -195,4 +195,4 @@ GitHub ActionsではmainへのpushとPRごとに、lint・型チェック・ユ�
 
 ## ライセンス
 
-本体は[MIT License](LICENSE)です。使用フォントと直接依存の[第三者ライセンス本文](public/licenses/README.md)を同梱しています。画像の出自・名義・推移的依存など、残る確認は[資産の棚卸し](docs/asset_license_inventory.md)を参照してください。
+本体は[MIT License](LICENSE)です。使用フォント・直接依存・推移的依存の[ライセンス原文と一覧](public/licenses/README.md)を同梱し、フォント135個を出典とバイナリhashに対応させて自前配信しています。`npm run licenses:check`で記録の整合性を確認できます。[資産の棚卸し](docs/asset_license_inventory.md)と[依存の監査範囲](docs/dependency_license_audit.md)を参照してください。
