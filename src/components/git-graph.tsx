@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { GitState } from '@/types/git';
+import { CommitDetails } from './commit-details';
 import { trackingStatus } from '@/learning/repository-view';
 import { calculateGraphLayout } from '@/utils/graph-layout';
 
@@ -25,6 +26,10 @@ export function GitGraph({ state }: GitGraphProps) {
     return layout;
   }, [state]);
 
+  const [zoom,setZoom] = useState(1);
+  const [selectedId,setSelectedId] = useState('');
+  const svgRef = useRef<SVGSVGElement>(null);
+  const headCircleRef = useRef<SVGCircleElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const headLabelRef = useRef<SVGRectElement>(null);
   const headId = state.HEAD.type === 'branch' ? state.branches[state.HEAD.value] : state.HEAD.value;
@@ -48,28 +53,48 @@ export function GitGraph({ state }: GitGraphProps) {
   const graphWidth = Math.max(800, nodes.length * 100, ...branchLabels.map(label => label.node.x + 10 + label.width + 24));
   const graphHeight = Math.max(400, ...nodes.map(node => node.y + 60), ...branchLabels.map(label => label.y + 50));
 
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    const label = headLabelRef.current;
-    if (!viewport || !label) return;
-    const bounds = label.getBBox();
-    const left = (headNode?.x ?? bounds.x) - 16;
-    const right = bounds.x + bounds.width + 16;
-    if (left < viewport.scrollLeft || right > viewport.scrollLeft + viewport.clientWidth - 32) {
-      viewport.scrollLeft = Math.max(0, right - viewport.clientWidth + 32);
-    }
-    if (bounds.y < viewport.scrollTop || bounds.y + bounds.height > viewport.scrollTop + viewport.clientHeight - 32) {
-      viewport.scrollTop = Math.max(0, bounds.y - 32);
-    }
-  }, [headId, state.HEAD.value, headNode?.x, headNode?.y]);
+  const focusHead = useCallback(() => {
+    const viewport=viewportRef.current;
+    const label=headLabelRef.current;
+    if(!viewport || !label)return;
+    const visible=viewport.getBoundingClientRect();
+    const bounds=label.getBoundingClientRect();
+    const circle=headCircleRef.current?.getBoundingClientRect() ?? bounds;
+    const left=Math.min(bounds.left,circle.left),right=Math.max(bounds.right,circle.right);
+    const top=Math.min(bounds.top,circle.top),bottom=Math.max(bounds.bottom,circle.bottom);
+    if(left<visible.left+16)viewport.scrollLeft+=left-visible.left-16;
+    else if(right>visible.left+viewport.clientWidth-16)viewport.scrollLeft+=right-visible.left-viewport.clientWidth+16;
+    if(top<visible.top+16)viewport.scrollTop+=top-visible.top-16;
+    else if(bottom>visible.top+viewport.clientHeight-16)viewport.scrollTop+=bottom-visible.top-viewport.clientHeight+16;
+  },[]);
+  useEffect(focusHead,[focusHead,headId,state.HEAD.value,headNode?.x,headNode?.y]);
+  const fitAll = () => {
+    const viewport=viewportRef.current,svg=svgRef.current;
+    if(!viewport || !svg)return;
+    const offset=svg.getBoundingClientRect().top-viewport.getBoundingClientRect().top+viewport.scrollTop;
+    const width=Math.max(1,viewport.clientWidth-32),height=Math.max(1,viewport.clientHeight-offset-16);
+    setZoom(Math.min(1,width/graphWidth,height/graphHeight));
+    viewport.scrollLeft=0;viewport.scrollTop=0;
+  };
+  const selected=state.commits[selectedId];
 
   return (
-    <div ref={viewportRef} role="region" aria-label="コミットグラフ" tabIndex={0} className="focus-visible:outline-2 focus-visible:outline-blue-400 w-full h-full bg-gray-900 overflow-auto p-4">
+    <div className="h-full min-h-0 flex flex-col">
+      <div role="group" aria-label="グラフの表示操作" className="shrink-0 flex flex-wrap items-center gap-2 border-b border-gray-700 px-3 text-sm">
+        <button type="button" tabIndex={0} aria-label="グラフを縮小" disabled={!nodes.length || zoom<=0.1} onClick={()=>setZoom(value=>Math.max(0.1,value/1.25))} className="min-h-11 px-2 underline disabled:opacity-50">−</button>
+        <output aria-label="グラフの拡大率" aria-live="polite">{Math.round(zoom*100)}%</output>
+        <button type="button" tabIndex={0} aria-label="グラフを拡大" disabled={!nodes.length || zoom>=2} onClick={()=>setZoom(value=>Math.min(2,value*1.25))} className="min-h-11 px-2 underline disabled:opacity-50">＋</button>
+        <button type="button" tabIndex={0} onClick={()=>setZoom(1)} className="min-h-11 underline">100%に戻す</button>
+        <button type="button" tabIndex={0} disabled={!nodes.length} onClick={fitAll} className="min-h-11 underline disabled:opacity-50">全体を表示</button>
+        <button type="button" tabIndex={0} disabled={!headNode} onClick={focusHead} className="min-h-11 underline disabled:opacity-50">HEADへ戻る</button>
+        <label className="flex items-center gap-2 min-w-0">コミットを選ぶ<select aria-label="コミットを選ぶ" value={selected ? selectedId : ''} onChange={event=>setSelectedId(event.target.value)} className="min-h-11 max-w-48 min-w-0 bg-gray-950 border border-gray-600 rounded"><option value="">詳細を表示</option>{nodes.map(node=><option key={node.id} value={node.id}>{node.id.slice(0,7)}: {node.commit.message}</option>)}</select></label>
+      </div>
+    <div ref={viewportRef} role="region" aria-label="コミットグラフ" tabIndex={0} className="focus-visible:outline-2 focus-visible:outline-blue-400 w-full flex-1 min-h-0 bg-gray-900 overflow-auto p-4">
       <div aria-label="リモートとの比較" className="mb-3 text-sm text-gray-200">
         <p>ローカル・remote（取得済みの参照）・tagを表示します。remoteはfetchするまで更新されません。</p>
         {trackingStatus(state).map(item => <p key={item.branch}>{item.branch} → {item.upstream}: {item.available ? `ahead ${item.ahead} / behind ${item.behind}` : '参照未取得'}</p>)}
       </div>
-      <svg role="img" aria-label="コミットの親子とブランチの位置" width={graphWidth} height={graphHeight} className="min-w-full min-h-full">
+      <svg ref={svgRef} role="img" aria-label="コミットの親子とブランチの位置" viewBox={`0 0 ${graphWidth} ${graphHeight}`} width={graphWidth*zoom} height={graphHeight*zoom} className="block max-w-none">
         <desc>{`HEADは${state.HEAD.type === 'branch' ? 'ブランチ' : 'コミット'} ${state.HEAD.value}。` +
           Object.entries(state.branches).map(([name, id]) => `ブランチ ${name} は ${id || '未作成のコミット'}。`).join('') +
           nodes.map(node => { const commit = state.commits[node.id]; return `${node.id}: ${commit.message}。親は${commit.parents.join('、') || 'なし'}。`; }).join('')}</desc>
@@ -98,6 +123,7 @@ export function GitGraph({ state }: GitGraphProps) {
             transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 260, damping: 20 }}
           >
             <circle
+              ref={node.id===headId ? headCircleRef : undefined}
               cx={node.x}
               cy={node.y}
               r={6}
@@ -180,6 +206,8 @@ export function GitGraph({ state }: GitGraphProps) {
            })()
         )}
       </svg>
+    </div>
+    {selected ? <CommitDetails commit={selected} parent={state.commits[selected.parents[0]]} onClose={()=>setSelectedId('')} /> : null}
     </div>
   );
 }

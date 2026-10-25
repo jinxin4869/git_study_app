@@ -45,6 +45,7 @@ export default function Game() {
 function LearningSession() {
   const reducedMotion = useReducedMotion();
   const [terminalSession, setTerminalSession] = useState(0);
+  const [graphSession, setGraphSession] = useState(0);
   const [saved] = useState(() => {
     try {
       const store = new ProgressStore(window.localStorage, new Set(scenarios.map(item => item.id)), new Set(categories));
@@ -139,6 +140,7 @@ function LearningSession() {
    */
   const loadScenario = useCallback((scenario: Scenario) => {
     setTerminalSession(previous => previous + 1);
+    setGraphSession(previous => previous + 1);
     setHintLevel(0);
     setLastAttempt(null);
     setDeleteScope(null);
@@ -213,6 +215,7 @@ function LearningSession() {
     setLastAttempt(null);
     setDeleteScope(null);
     setTerminalSession(previous => previous + 1);
+    setGraphSession(previous => previous + 1);
     setOutput([{ type: 'info', content: '自由練習です。演習を選ばずに模擬Gitを試せます。' }]);
     setInput('');
     setHistory([]);
@@ -665,7 +668,7 @@ function LearningSession() {
           </div>
           
           <div className="flex-1 relative overflow-hidden bg-gray-950/50">
-            <GitGraph state={state} />
+            <GitGraph key={graphSession} state={state} />
             
             {Object.keys(state.commits).length === 0 && (
               <div className="absolute inset-0 flex items-center justify-center text-gray-400 pointer-events-none">
