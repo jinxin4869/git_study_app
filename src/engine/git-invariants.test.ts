@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitEngine } from './git-simulator';
 import type { Commit, GitState } from '@/types/git';
+
+afterEach(() => vi.restoreAllMocks());
 
 // Fixed seeds make a failure reproducible without an additional property-test dependency.
 function random(seed: number) {
@@ -48,6 +50,10 @@ function assertState(state: GitState, context: string) {
 describe('seeded operation sequences preserve repository invariants', () => {
   it.each([1, 42, 0xc0ffee, 20261025])('seed %i', seed => {
     const pick = random(seed);
+    // IDs influence Object.keys ordering and replay targets; seed them independently.
+    const idRandom = random(seed ^ 0x5eed1234);
+    vi.spyOn(Math, 'random').mockImplementation(() => idRandom(0x1_0000_0000) / 0x1_0000_0000);
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000 + seed);
     const engine = new GitEngine();
     for (const command of [
       'echo "base" > app.ts', 'git add .', 'git commit -m "Root"',
