@@ -8,9 +8,10 @@ interface FilePreviewProps {
   file: { path: string; content: string | undefined } | null;
   onClose: () => void;
   state?: GitState;
+  onEdit?: () => void;
 }
 
-export function FilePreview({ file, onClose, state }: FilePreviewProps) {
+export function FilePreview({ file, onClose, state, onEdit }: FilePreviewProps) {
   const [compare, setCompare] = useState(false);
   if (!file) return null;
 
@@ -21,6 +22,7 @@ export function FilePreview({ file, onClose, state }: FilePreviewProps) {
           <FileText className="w-4 h-4 shrink-0 text-blue-400" />
           <span className="break-all font-medium text-sm">{file.path}</span>
         </div>
+        <div className="flex shrink-0 items-center gap-1">
         <button tabIndex={0}
           onClick={onClose}
           className="flex min-h-11 min-w-11 shrink-0 items-center justify-center hover:bg-gray-700 rounded-md text-gray-400 hover:text-gray-200 transition-colors"
@@ -28,6 +30,8 @@ export function FilePreview({ file, onClose, state }: FilePreviewProps) {
         >
           <X className="w-4 h-4" />
         </button>
+        {onEdit ? <button tabIndex={0} type="button" onClick={onEdit} aria-label="ファイルを編集" className="min-h-11 min-w-11 text-blue-200 underline">編集</button> : null}
+        </div>
       </div>
       {state ? <button tabIndex={0} onClick={() => setCompare(value => !value)} aria-expanded={compare} className="min-h-11 px-4 text-left text-blue-200 underline">{compare ? '作業ツリーだけ表示' : 'HEAD・ステージ・作業ツリーを比較'}</button> : null}
       <div className="flex-1 overflow-auto p-4">
