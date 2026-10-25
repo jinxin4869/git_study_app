@@ -1,5 +1,6 @@
 import { GitState, CommandResult, Commit, FileChange } from '@/types/git';
 import { generateDiff } from '@/utils/diff-utils';
+import { cleanPreview } from './clean-preview';
 import { headTree, indexTree, sameTree, cleanTrackedFiles, inSparseScope, sparseTree, untrackedFiles, dictionary, cloneGitData, normalizeGitData } from './git-state';
 import { githubCommand } from './github-simulator';
 import { copyHistory, isAncestor, resolveRevision } from './revisions';
@@ -214,6 +215,8 @@ export class GitEngine {
         return this.commit(args);
       case 'status':
         return this.status(args);
+      case 'clean':
+        return cleanPreview(this.state, args);
       case 'blame':
         return this.blame(args);
       case 'log':

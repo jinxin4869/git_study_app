@@ -33,6 +33,7 @@ export function tokenizeCommand(command: string): { tokens: CommandToken[]; erro
 /** Flags actually read by the simulator. Status/commit/switch/rm retain their detailed validators. */
 const options: Record<string, { flags: string[]; values?: string[]; assignments?: string[] }> = {
   init: { flags: [] }, clone: { flags: [] }, add: { flags: ['-A', '-f', '-p', '--patch'] },
+  clean: { flags: ['-n', '--dry-run', '-d', '-nd', '-dn'] },
   log: { flags: ['--oneline', '--graph', '--all'], values: ['--grep'] },
   diff: { flags: ['--cached', '--staged', '--name-only'] }, show: { flags: [] }, reflog: { flags: [] }, blame: { flags: [] },
   branch: { flags: ['-a', '-m', '-d', '-D'] }, checkout: { flags: ['-b', '--detach'] },
@@ -86,6 +87,7 @@ const syntaxHelp: Record<string, string> = {
   remote: '[-v] / add name URL / remove name', fetch: '[remote] [branch] [--prune]',
   pull: '[--rebase|--ff-only] [remote] [branch]', push: '[remote] [branch] [-u] [--tags|--delete|--force-with-lease]',
   rebase: '[-i] <upstream> / --continue / --skip / --abort',
+  clean: '-n [-d] / --dry-run [-d]（確認のみ。実削除・パス指定には未対応）',
   worktree: 'list / add [-b branch] path [start] / remove path',
   bisect: 'start / good [commit] / bad [commit] / reset',
   'sparse-checkout': 'init [--cone] / set directory... / list / disable',
