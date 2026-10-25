@@ -17,13 +17,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/real-git-lab.test.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
-    "test:e2e:production": "playwright test --config=playwright.production.config.ts"
+    "test:e2e:production": "playwright test --config=playwright.production.config.ts",
+    "lab": "node scripts/real-git-lab.mjs"
   },
   "dependencies": {
     "@types/diff": "^7.0.2",
@@ -32,7 +33,7 @@
     "diff": "^8.0.4",
     "framer-motion": "^12.23.24",
     "lucide-react": "^1.49.0",
-    "next": "15.5.27",
+    "next": "15.5.28",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tailwind-merge": "^3.7.0"
@@ -44,14 +45,14 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@typescript/native": "npm:typescript@^7.0.2",
     "axe-core": "4.13.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vite": "^8.3.1",
-    "vitest": "^5.0.2",
-    "@typescript/native": "npm:typescript@^7.0.2"
+    "vitest": "^5.0.2"
   },
   "overrides": {
     "postcss": "8.5.28"

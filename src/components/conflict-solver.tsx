@@ -24,6 +24,7 @@ interface ConflictSection {
  * and allows the user to choose between Current Change, 取り込み側の変更, or Both.
  */
 export function ConflictSolver({ filePath, content, onResolve, onCancel }: ConflictSolverProps) {
+  const [draft, setDraft] = useState<string | null>(null);
   const [decisions, setDecisions] = useState<Record<string, 'current' | 'incoming' | 'both' | null>>({});
 
   /**
@@ -42,7 +43,7 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
     let state: 'normal' | 'current' | 'incoming' = 'normal';
 
     lines.forEach((line, index) => {
-      if (line.startsWith('<<<<<<<')) {
+      if (line.startsWith('<<<<<<<') && state === 'normal') {
         // コンフリクトブロックの開始
         // 直前の通常テキストを追加
         if (buffer.length > 0) {
@@ -51,14 +52,14 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
         }
         state = 'current';
         currentSection = { type: 'conflict', current: '', incoming: '', id: `conflict-${index}` };
-      } else if (line.startsWith('=======')) {
+      } else if (line.startsWith('=======') && state === 'current' && currentSection) {
         // コンフリクトブロックの中間（区切り）
         if (state === 'current' && currentSection) {
           currentSection.current = buffer.join('\n');
           buffer = [];
           state = 'incoming';
         }
-      } else if (line.startsWith('>>>>>>>')) {
+      } else if (line.startsWith('>>>>>>>') && state === 'incoming' && currentSection) {
         // コンフリクトブロックの終了
         if (state === 'incoming' && currentSection) {
           currentSection.incoming = buffer.join('\n');
@@ -72,6 +73,8 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
         buffer.push(line);
       }
     });
+
+    if (state !== 'normal') return [{type:'text',content:text,id:'incomplete'} as ConflictSection];
 
     // 残りのテキストを追加
     if (buffer.length > 0) {
@@ -90,19 +93,18 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
   /**
    * Reconstructs the file content based on user decisions and triggers onResolve.
    */
-  const handleComplete = () => {
-    if (!allResolved) return;
-    const resolved = sections.map(s => {
-      if (s.type === 'text') return s.content;
-      const decision = decisions[s.id];
-      if (decision === 'current') return s.current;
-      if (decision === 'incoming') return s.incoming;
-      return s.current + '\n' + s.incoming;
-    }).join('\n');
-    onResolve(filePath, resolved);
-  };
+  const suggested = sections.map(s => {
+    if (s.type === 'text') return s.content;
+    const decision = decisions[s.id];
+    if (decision === 'current') return s.current;
+    if (decision === 'incoming') return s.incoming;
+    if (decision === 'both') return s.current + '\n' + s.incoming;
+    return `<<<<<<< HEAD\n${s.current}\n=======\n${s.incoming}\n>>>>>>> incoming`;
+  }).join('\n');
+  const result = draft ?? suggested;
+  const allResolved = !/^(<<<<<<<|=======|>>>>>>>)/m.test(result);
+  const handleComplete = () => { if (allResolved) onResolve(filePath, result); };
 
-  const allResolved = sections.every(s => s.type === 'text' || !!decisions[s.id]);
   const hasConflicts = content.includes('<<<<<<<');
 
   return (
@@ -112,11 +114,11 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
             {hasConflicts ? `競合の解消: ${filePath}` : `ファイルの内容: ${filePath}`}
         </h3>
         <div className="flex flex-wrap gap-2">
-          <button onClick={onCancel} className="min-h-11 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white">
+          <button tabIndex={0} onClick={onCancel} className="min-h-11 px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white">
             {hasConflicts ? 'キャンセル' : '閉じる'}
           </button>
           {hasConflicts && (
-            <button 
+            <button tabIndex={0}
                 onClick={handleComplete} 
                 disabled={!allResolved}
                 className={`min-h-11 px-3 py-2 rounded flex items-center gap-2 ${allResolved ? 'bg-green-800 hover:bg-green-700 text-white' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}
@@ -127,6 +129,13 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
         </div>
       </div>
 
+      <div className="mb-4 space-y-2">
+        <label htmlFor="conflict-result" className="block font-bold">解消結果のプレビュー・編集</label>
+        <p>採用する行を直接編集できます。「両方」は正しいコードを保証しません。内容を確認し、適用後にgit addで解消を記録してください。</p>
+        <textarea id="conflict-result" value={result} onChange={event => setDraft(event.target.value)} rows={8} spellCheck={false} className="w-full rounded border border-gray-600 bg-gray-950 p-2 text-base text-gray-100" />
+        {draft !== null ? <button tabIndex={0} onClick={() => setDraft(null)} className="min-h-11 underline">選択結果から作り直す</button> : null}
+        {!allResolved ? <p role="status">競合マーカーが残っています。</p> : <p role="status">適用する内容を確認してください。</p>}
+      </div>
       <div className="space-y-4">
         {sections.map((section) => (
           <div key={section.id}>
@@ -139,7 +148,7 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
                   <div className={`p-2 ${decisions[section.id] === 'current' || decisions[section.id] === 'both' ? 'bg-green-900/30' : 'bg-gray-800/50'}`}>
                     <div className="text-xs text-green-400 mb-1 font-bold">現在側の変更 (HEAD)</div>
                     <pre className="whitespace-pre-wrap break-words text-gray-300">{section.current}</pre>
-                    <button 
+                    <button tabIndex={0}
                       onClick={() => handleDecision(section.id, 'current')}
                       aria-pressed={decisions[section.id] === 'current'}
                       className={`mt-2 w-full min-h-11 py-2 text-xs rounded border ${decisions[section.id] === 'current' ? 'bg-green-800 border-green-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
@@ -152,7 +161,7 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
                   <div className={`p-2 ${decisions[section.id] === 'incoming' || decisions[section.id] === 'both' ? 'bg-blue-900/30' : 'bg-gray-800/50'}`}>
                     <div className="text-xs text-blue-400 mb-1 font-bold">取り込み側の変更</div>
                     <pre className="whitespace-pre-wrap break-words text-gray-300">{section.incoming}</pre>
-                    <button 
+                    <button tabIndex={0}
                       onClick={() => handleDecision(section.id, 'incoming')}
                       aria-pressed={decisions[section.id] === 'incoming'}
                       className={`mt-2 w-full min-h-11 py-2 text-xs rounded border ${decisions[section.id] === 'incoming' ? 'bg-blue-800 border-blue-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}
@@ -162,7 +171,7 @@ export function ConflictSolver({ filePath, content, onResolve, onCancel }: Confl
                   </div>
                 </div>
                 <div className="p-2 bg-gray-800 border-t border-gray-700 text-center">
-                   <button 
+                   <button tabIndex={0}
                       onClick={() => handleDecision(section.id, 'both')}
                       aria-pressed={decisions[section.id] === 'both'}
                       className={`w-full min-h-11 py-2 text-xs rounded border ${decisions[section.id] === 'both' ? 'bg-purple-800 border-purple-500 text-white' : 'border-gray-600 hover:bg-gray-700 text-gray-400'}`}

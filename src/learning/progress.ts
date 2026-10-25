@@ -1,4 +1,4 @@
-/** Only learning records are persisted; GitState and terminal contents never are. */
+/** Progress and explicit session checkpoints share a versioned namespace. */
 export const PROGRESS_PREFIX = 'git-learning:v1:';
 export const SELECTION_KEY = `${PROGRESS_PREFIX}selection`;
 export interface Selection { lastId: string | null; category: string; search: string }
@@ -102,7 +102,7 @@ export class ProgressStore {
     const removed = new Map<string, string>();
     try {
       if (id && !this.ids.has(id)) return '演習IDが無効です。';
-      const keys = id ? [`${PROGRESS_PREFIX}complete:${id}`, `${PROGRESS_PREFIX}hint:${id}`] :
+      const keys = id ? [`${PROGRESS_PREFIX}complete:${id}`, `${PROGRESS_PREFIX}hint:${id}`, `${PROGRESS_PREFIX}session:${id}`] :
         Array.from({ length: this.storage.length }, (_, i) => this.storage.key(i)).filter((key): key is string => !!key?.startsWith(PROGRESS_PREFIX));
       // Read all selected records before deleting any, so a denied read cannot cause a partial deletion.
       const records = keys.map(key => [key, this.storage.getItem(key)] as const);

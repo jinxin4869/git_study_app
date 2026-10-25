@@ -57,7 +57,7 @@ export function FileTree({ state, onFileClick }: FileTreeProps) {
       if (node.path === '') return <div key="root">{[...node.children.values()].map(child => renderNode(child, depth))}</div>;
       return (
         <div key={`folder:${node.path}`}>
-          <button
+          <button tabIndex={0}
             type="button"
             aria-expanded={isExpanded}
             aria-label={`${node.path}フォルダ`}
@@ -78,7 +78,7 @@ export function FileTree({ state, onFileClick }: FileTreeProps) {
     const Icon = file.conflict ? AlertCircle : FileText;
     const statusId = `${treeId}-${encodeURIComponent(node.path)}`;
     return (
-      <button
+      <button tabIndex={0}
         type="button"
         aria-label={`${node.path}を開く`}
         aria-describedby={labels.length ? statusId : undefined}

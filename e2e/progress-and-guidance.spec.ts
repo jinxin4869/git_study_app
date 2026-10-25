@@ -190,14 +190,20 @@ test('keyboard search, selection, hint and missing-file focus fallback', async (
   await page.goto('/game');
   const search = page.getByLabel('演習を検索');
   await search.focus(); await page.keyboard.type('Level 1-3');
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: '基本操作から始める' })).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: '自由練習に切り替える' })).toBeFocused();
-  await page.keyboard.press('Tab'); // Closed save disclosure.
-  await expect(page.getByText('保存と再開', { exact: true })).toBeFocused();
-  await page.keyboard.press('Tab'); // The sole search result.
-  await expect(page.getByRole('button', { name: /Level 1-3/ })).toBeFocused();
+  for (const target of [
+    page.getByLabel('難易度', { exact: true }),
+    page.getByLabel('完了状態', { exact: true }),
+    page.getByRole('link', { name: 'ホームへ戻る' }),
+    page.getByRole('button', { name: '基本操作から始める' }),
+    page.getByRole('button', { name: '自由練習に切り替える' }),
+    page.getByText('操作リファレンス・理解度チェック', { exact: true }),
+    page.getByText('途中状態・バックアップ', { exact: true }),
+    page.getByText('保存と再開', { exact: true }),
+    page.getByRole('button', { name: /Level 1-3/ }),
+  ]) {
+    await page.keyboard.press('Tab');
+    await expect(target).toBeFocused();
+  }
   await page.keyboard.press('Enter');
   await expect(page.getByRole('textbox', { name: '演習コマンド' })).toBeFocused();
   const hint = page.getByRole('button', { name: 'ヒント 1: 考え方を開く' });

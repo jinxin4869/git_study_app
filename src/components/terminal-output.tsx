@@ -51,7 +51,7 @@ export function TerminalOutput({ lines }: { lines: TerminalLine[] }) {
         </div>)}
       </div>
     </div>
-    <button type="button" onClick={() => {
+    <button tabIndex={0} type="button" onClick={() => {
       following.current = true;
       if (viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight;
       setIsFollowing(true);
