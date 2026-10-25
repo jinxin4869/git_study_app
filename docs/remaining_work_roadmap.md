@@ -662,4 +662,4 @@ O04はNext.js 15.5.28と互換範囲の依存更新・再監査、週次監査wo
 
 各操作の後に、ローカル/模擬remoteの参照先・親コミットの存在、履歴の非循環、HEADのattached/detached整合、indexのパス・内容型、未解消パスの重複、過去コミットの不変性、返却snapshotの一致を確認する。不正構文は操作の途中でもstate全体を保持すること、取得したsnapshotを変更してもengine内の状態が変わらないことも確認する。状態変更が15回未満のseedは失敗させ、拒否だけで通るテストにしない。
 
-既存の教材別・実Gitとの差分テストを補完する範囲であり、全操作列や全Git機能の正しさを保証しない。worktree・bisect・sparse checkout・部分stage・対話的rebaseのtodo編集などはこの乱択対象に含めず、既存の個別テストを維持する。包括的な不変条件チェックの本番導入や、生成器の対象拡張は残る。
+後続の[高度な操作と保存境界のテスト拡張](test_expansion.md)で、worktree・bisect・sparse checkout・部分stage・todo編集を4seed×120回の混合列、個別境界とcheckpoint再開へ追加。全139教材の各ステップも共通の不変条件で検証する。bisect resetによる調査中commit/stash消失と、壊れた保存参照の受入れを修正した。既存の教材別・実Git比較を補完する範囲で、全操作列の網羅や本番への常時検査導入を意味しない。

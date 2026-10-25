@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GitEngine } from './git-simulator';
-import type { Commit, GitState } from '@/types/git';
+import { assertGitState } from './invariant-test-helpers';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -11,40 +11,6 @@ function random(seed: number) {
     value = (Math.imul(value, 1664525) + 1013904223) >>> 0;
     return value % length;
   };
-}
-
-function assertHistory(commits: Record<string, Commit>, refs: string[], context: string) {
-  for (const id of refs) expect(Object.hasOwn(commits, id), `${context}: ref ${id}`).toBe(true);
-  const visited = new Set<string>();
-  const visiting = new Set<string>();
-  const visit = (id: string) => {
-    expect(visiting.has(id), `${context}: parent cycle at ${id}`).toBe(false);
-    if (visited.has(id)) return;
-    const commit = commits[id];
-    expect(commit, `${context}: missing parent ${id}`).toBeDefined();
-    expect(commit.id, context).toBe(id);
-    visiting.add(id);
-    for (const parent of commit.parents) visit(parent);
-    visiting.delete(id);
-    visited.add(id);
-    for (const content of Object.values(commit.tree)) expect(typeof content, context).toBe('string');
-  };
-  for (const id of Object.keys(commits)) visit(id);
-}
-
-function assertState(state: GitState, context: string) {
-  const head = state.HEAD.type === 'branch' ? state.branches[state.HEAD.value] : state.HEAD.value;
-  assertHistory(state.commits, [head, ...Object.values(state.branches), ...Object.values(state.remoteBranches), ...Object.values(state.tags ?? {}).map(tag => tag.commitId), ...(state.reflog ?? []).map(entry => entry.id)], context);
-  expect(state.detachedHead, context).toBe(state.HEAD.type === 'commit');
-  expect(new Set(state.unmergedPaths).size, context).toBe(state.unmergedPaths?.length ?? 0);
-  for (const [path, entry] of Object.entries(state.index)) {
-    expect(entry.path, context).toBe(path);
-    if (entry.status !== 'deleted') expect(typeof entry.content, context).toBe('string');
-  }
-  for (const content of Object.values(state.workingDirectory)) expect(typeof content, context).toBe('string');
-  for (const server of Object.values(state.mockServers)) {
-    assertHistory(server.commits, [...Object.values(server.branches), ...Object.values(server.tags ?? {}).map(tag => tag.commitId)], `${context}: mock remote`);
-  }
 }
 
 describe('seeded operation sequences preserve repository invariants', () => {
@@ -72,7 +38,7 @@ describe('seeded operation sequences preserve repository invariants', () => {
       const after = engine.getState();
       if (JSON.stringify(before) !== JSON.stringify(after)) stateChanges++;
       expect(result.message, context).not.toContain('予期しないエラー');
-      assertState(after, context);
+      assertGitState(after, context);
       // None of the sampled operations prunes objects: old snapshots must stay immutable.
       for (const [id, commit] of Object.entries(before.commits)) expect(after.commits[id], context).toEqual(commit);
       if (result.newState) expect(result.newState, context).toEqual(after);
