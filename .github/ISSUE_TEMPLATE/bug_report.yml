@@ -1,0 +1,45 @@
+name: 不具合の報告
+description: 演習・コマンド・保存・表示の問題を再現できる形で報告します。
+title: "bug: "
+body:
+  - type: markdown
+    attributes:
+      value: 認証情報・個人情報・実業務データを貼らず、合成した再現例を使用してください。
+  - type: textarea
+    id: context
+    attributes:
+      label: 問題が起きた場面
+      description: 演習名/ID、自由練習か、保存再開・演習やbranch切替の有無を記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 再現手順
+      description: 初期化した状態から、入力コマンドと画面操作を順番に記載してください。
+      placeholder: |
+        1. 演習IDを選択
+        2. git statusを実行
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待する結果
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 実際の結果
+      description: エラー文や状態の違いを記載してください。ログは機密を除いてください。
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: 環境
+      description: コミットSHA（git rev-parse HEAD）、Node.js、ブラウザ/OS、ローカルか公開URLか。分からない項目は不明と記載できます。
+    validations:
+      required: true
