@@ -9,6 +9,8 @@ import { GitGraph } from '@/components/git-graph';
 import { ConflictSolver } from '@/components/conflict-solver';
 import { FileTree } from '@/components/file-tree';
 import { FilePreview } from '@/components/file-preview';
+import { WorkingFileEditor } from '@/components/working-file-editor';
+import { openWorkingFile,applyWorkingFile,type WorkingFileDraft } from '@/learning/working-file-edit';
 import { TerminalOutput, type TerminalLine } from '@/components/terminal-output';
 import { GitState, Scenario, CommandResult } from '@/types/git';
 import { scenarios } from '@/engine/scenarios';
@@ -83,6 +85,7 @@ function LearningSession() {
   const [completionReasons, setCompletionReasons] = useState<string[]>([]);
   const [completedIds, setCompletedIds] = useState<Set<string>>(() => new Set(saved.snapshot.completed.keys()));
   const [resolvingFile, setResolvingFile] = useState<ConflictResolutionSession | null>(null);
+  const [editingFile,setEditingFile] = useState<WorkingFileDraft|null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [hintLevel, setHintLevel] = useState(0);
   const [lastAttempt, setLastAttempt] = useState<{ command: string; result: CommandResult } | null>(null);
@@ -146,6 +149,7 @@ function LearningSession() {
     setInput('');
     setSelectedFile(null);
     setResolvingFile(null);
+    setEditingFile(null);
     if (scenario.initialState) {
       engine.loadState(scenario.initialState);
     } else {
@@ -208,6 +212,7 @@ function LearningSession() {
     setHintLevel(0);
     setSelectedFile(null);
     setResolvingFile(null);
+    setEditingFile(null);
     setLastAttempt(null);
     setDeleteScope(null);
     setTerminalSession(previous => previous + 1);
@@ -429,21 +434,39 @@ function LearningSession() {
     focusReturn.current = true;
   };
 
+  const beginFileEdit = (path:string|null) => {
+    fileReturnPath.current=path;setEditingFile(openWorkingFile(engine.getState(),path));setSelectedFile(null);setResolvingFile(null);focusPanel.current=true;
+  };
+  const applyFileEdit = (path:string,content:string|undefined):CommandResult => {
+    if(!editingFile)return {success:false,message:'編集を開き直してください。'};
+    const result=applyWorkingFile(engine,editingFile,path,content);
+    if(!result.success){notify(result.message);return result;}
+    const next=engine.getState();setState(next);setLastAttempt({command:'',result});
+    setOutput(previous=>[...previous,{type:'info',content:`作業ファイルを${content===undefined?'削除':'保存'}しました: ${path}。stage・commitは別の操作です。`}]);
+    const assessment=currentScenario?assessGoal(next,currentScenario,'',result):null;
+    if(currentScenario && !isGoalMet && assessment?.met)recordCompletion(currentScenario,assessment);
+    else notify(`作業ファイルを${content===undefined?'削除':'保存'}しました。`);
+    setEditingFile(null);setSelectedFile(content===undefined?null:path);fileReturnPath.current=path;
+    if(content===undefined)focusReturn.current=true;else focusPanel.current=true;
+    return result;
+  };
   const closeFile = () => {
     setSelectedFile(null);
     setResolvingFile(null);
+    setEditingFile(null);
     focusReturn.current = true;
   };
   useEffect(() => {
     if (focusPanel.current) {
-      filePanelRef.current?.querySelector<HTMLElement>('button')?.focus();
+      const selector=editingFile ? editingFile.path===null ? 'input' : 'textarea' : 'button';
+      filePanelRef.current?.querySelector<HTMLElement>(selector)?.focus();
       focusPanel.current = false;
     } else if (focusReturn.current) {
       const target = [...(filePanelRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find(button => button.getAttribute('aria-label') === `${fileReturnPath.current}を開く`);
       (target ?? commandRef.current)?.focus();
       focusReturn.current = false;
     }
-  }, [selectedFile, resolvingFile]);
+  }, [selectedFile, resolvingFile, editingFile]);
 
   return (
     <main className="flex flex-col min-h-screen lg:flex-row lg:h-screen bg-gray-950 text-gray-100 font-sans lg:overflow-hidden">
@@ -672,14 +695,15 @@ function LearningSession() {
         <div className="flex-1 flex flex-col bg-gray-900 overflow-hidden">
           <div className="p-3 border-b border-gray-800 font-bold text-sm text-gray-400 flex flex-wrap gap-2 justify-between items-center">
             <span>作業ツリー</span>
+            <button type="button" tabIndex={0} disabled={!!editingFile} onClick={()=>beginFileEdit(null)} className="min-h-11 px-2 underline text-blue-200 disabled:opacity-50">ファイルを作成</button>
             <span className="text-xs normal-case text-gray-300">
               <span className="text-yellow-500">●</span> 変更
               <span className="text-green-500 ml-2">●</span> ステージ
               <span className="text-red-500 ml-2">●</span> 競合
             </span>
           </div>
-          <div ref={filePanelRef} onKeyDown={event => { if (event.key === "Escape" && (selectedFile || resolvingFile)) { event.preventDefault(); closeFile(); } }} className="flex-1 overflow-auto">
-            {resolvingFile && engine.isConflictResolutionCurrent(resolvingFile) ? (
+          <div ref={filePanelRef} onKeyDown={event => { if (event.key === "Escape" && !event.nativeEvent.isComposing && event.keyCode!==229 && (selectedFile || resolvingFile || editingFile)) { event.preventDefault(); closeFile(); } }} className="flex-1 overflow-auto">
+            {editingFile ? <WorkingFileEditor draft={editingFile} onApply={applyFileEdit} onClose={closeFile} /> : resolvingFile && engine.isConflictResolutionCurrent(resolvingFile) ? (
               <ConflictSolver 
                 key={`${resolvingFile.path}:${resolvingFile.revision}`}
                 filePath={resolvingFile.path} 
@@ -691,10 +715,11 @@ function LearningSession() {
               <FilePreview
                 file={previewFile}
                 state={state}
+                onEdit={()=>beginFileEdit(previewFile.path)}
                 onClose={closeFile}
               />
             ) : null}
-            <div hidden={!!resolvingFile || !!previewFile}>
+            <div hidden={!!editingFile || !!resolvingFile || !!previewFile}>
               <FileTree 
                 state={state} 
                 onFileClick={(path) => {
