@@ -16,6 +16,7 @@ const eslintConfig = defineConfig([
     "test-results/**",
     "blob-report/**",
     "coverage/**",
+    "benchmark-results/**",
   ]),
 ]);
 

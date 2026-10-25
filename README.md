@@ -143,6 +143,10 @@ V8で計測し、端末の一覧・`coverage/index.html`・`coverage/coverage-su
 
 計測は任意で、通常の`npm test`とCIの合格条件は変えません。詳細と読み方は[カバレッジ測定](docs/unit_coverage.md)を参照してください。
 
+### 履歴量による負荷の測定
+
+`npm run bench`で、100・500・1,000コミットの合成データを使い、グラフ配置・snapshotコピー・status・リモート差分計算を測定します。結果は端末と`benchmark-results/scaling.json`に出力します。通常テストやCIには含めません。Node上の計算時間の測定であり、ブラウザの描画性能とは異なります。[測定条件と読み方](docs/performance_baseline.md)を参照してください。
+
 ### ブラウザのE2Eテスト
 
 Playwrightで画面操作を確認します。初回はChromium・Firefox・WebKitとOSライブラリをインストールしてください。
