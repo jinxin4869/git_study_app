@@ -133,6 +133,16 @@ npm run test
 npm run test:watch
 ```
 
+### ユニットテストのカバレッジ
+
+```bash
+npm run test:coverage
+```
+
+V8で計測し、端末の一覧・`coverage/index.html`・`coverage/coverage-summary.json`を出力します。未実行の画面コードも含めて`src/`を集計し、テスト本体・型定義・テスト用シミュレータは除きます。実GitラボのNode.jsテストとブラウザE2Eはこの数値に含まれません。画面コードの低い数値は、E2E未実施や機能不良を直接示すものではありません。
+
+計測は任意で、通常の`npm test`とCIの合格条件は変えません。詳細と読み方は[カバレッジ測定](docs/unit_coverage.md)を参照してください。
+
 ### ブラウザのE2Eテスト
 
 Playwrightで画面操作を確認します。初回はChromium・Firefox・WebKitとOSライブラリをインストールしてください。
