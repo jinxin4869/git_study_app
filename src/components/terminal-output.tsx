@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 
 export interface TerminalLine {
   type: 'command' | 'success' | 'error' | 'info';
@@ -9,6 +9,9 @@ export interface TerminalLine {
 
 /** Scroll only this viewport. Reading older output suspends following until explicitly resumed. */
 export function TerminalOutput({ lines }: { lines: TerminalLine[] }) {
+  const manualCopyId = useId();
+  const [copyState, setCopyState] = useState<'idle' | 'copying' | 'copied' | 'manual'>('idle');
+  const [manualText, setManualText] = useState('');
   const viewport = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
   const following = useRef(true);
@@ -35,7 +38,26 @@ export function TerminalOutput({ lines }: { lines: TerminalLine[] }) {
     return () => observer.disconnect();
   }, []);
 
+  const copyOutput = async () => {
+    const snapshot = lines.map(line => line.content).join('\n');
+    setCopyState('copying');
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
+      await navigator.clipboard.writeText(snapshot);
+      setManualText('');
+      setCopyState('copied');
+    } catch {
+      setManualText(snapshot);
+      setCopyState('manual');
+    }
+  };
+
   return <div className="flex-1 min-h-40 flex flex-col bg-black/50">
+    <div className="shrink-0 px-3 border-b border-gray-700 text-sm">
+      <button tabIndex={0} type="button" disabled={!lines.length || copyState === 'copying'} onClick={copyOutput} className="min-h-11 text-blue-200 underline disabled:opacity-50">端末出力をコピー</button>
+      <p role="status">{copyState === 'copied' ? '押した時点の端末出力をコピーしました。' : copyState === 'manual' ? 'コピーできませんでした。下の内容を選択して手動でコピーしてください。' : copyState === 'copying' ? 'コピーしています。' : ''}</p>
+      {copyState === 'manual' ? <div><label htmlFor={manualCopyId} className="block">手動でコピー</label><textarea id={manualCopyId} readOnly value={manualText} onFocus={event => event.currentTarget.select()} rows={3} className="block w-full rounded bg-gray-950 p-2 font-mono text-base text-gray-100" /></div> : null}
+    </div>
     <div ref={viewport} role="region" aria-label="端末出力" tabIndex={0}
       onScroll={event => {
         const element = event.currentTarget;
