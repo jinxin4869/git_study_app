@@ -50,4 +50,3 @@ export function assertGitState(state: GitState, context: string) {
   if (state.operation?.current) expect(state.commits[state.operation.current.id], context).toBeDefined();
   for (const id of [state.bisect?.good, state.bisect?.bad, state.bisect?.found].filter((id): id is string => !!id)) expect(state.commits[id], context).toBeDefined();
 }
-
