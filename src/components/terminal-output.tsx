@@ -52,7 +52,7 @@ export function TerminalOutput({ lines }: { lines: TerminalLine[] }) {
     }
   };
 
-  return <div className="flex-1 min-h-40 flex flex-col bg-black/50">
+  return <div className={`flex-1 flex flex-col bg-black/50 ${copyState === 'manual' ? 'min-h-[22rem]' : 'min-h-56'}`}>
     <div className="shrink-0 px-3 border-b border-gray-700 text-sm">
       <button tabIndex={0} type="button" disabled={!lines.length || copyState === 'copying'} onClick={copyOutput} className="min-h-11 text-blue-200 underline disabled:opacity-50">端末出力をコピー</button>
       <p role="status">{copyState === 'copied' ? '押した時点の端末出力をコピーしました。' : copyState === 'manual' ? 'コピーできませんでした。下の内容を選択して手動でコピーしてください。' : copyState === 'copying' ? 'コピーしています。' : ''}</p>
@@ -65,7 +65,7 @@ export function TerminalOutput({ lines }: { lines: TerminalLine[] }) {
         setIsFollowing(following.current);
         if (following.current) setSeenLines(lines);
       }}
-      className="flex-1 min-h-0 overflow-auto p-4 font-mono text-sm focus-visible:outline-2 focus-visible:outline-blue-400">
+      className="flex-1 min-h-20 overflow-auto p-4 font-mono text-sm focus-visible:outline-2 focus-visible:outline-blue-400">
       <div ref={content} className="space-y-2">
         {lines.map((line, index) => <div key={index}
           className={`whitespace-pre-wrap break-words ${line.type === 'error' ? 'text-red-400' : 'text-green-400'}`}>
