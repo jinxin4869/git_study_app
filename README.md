@@ -192,3 +192,7 @@ GitHub ActionsではmainへのpushとPRごとに、lint・型チェック・ユ�
 -   **Icons**: Lucide React
 -   **Animation**: Framer Motion, Canvas Confetti
 -   **Testing**: Vitest、Playwright
+
+## ライセンス
+
+本体は[MIT License](LICENSE)です。使用フォントと直接依存の[第三者ライセンス本文](public/licenses/README.md)を同梱しています。画像の出自・名義・推移的依存など、残る確認は[資産の棚卸し](docs/asset_license_inventory.md)を参照してください。
