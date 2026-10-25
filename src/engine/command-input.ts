@@ -99,3 +99,11 @@ export function commandHelp(command?: string): string | null {
   const spec = options[command];
   return `git ${command} ${syntaxHelp[command] ?? '[対象]'}\n対応オプション: ${[...spec.flags, ...spec.values ?? [], ...spec.assignments ?? []].join('、') || 'なし'}\n実Gitの全構文には対応していません。引用符で空白を含む値を指定できます。パイプ・コマンド連結・追記は未対応です。`;
 }
+
+/** The same option names used by validation, plus commands with dedicated validators. */
+export function completionFlags(command: string): string[] {
+  const syntax = Object.hasOwn(options, command) ? options[command] : undefined;
+  if (syntax) return [...syntax.flags, ...syntax.values ?? [], ...syntax.assignments ?? []];
+  const dedicated: Record<string,string[]> = {status:['--ignored'],commit:['-m','--amend','--no-edit'],switch:['-c','--create','-d','--detach','-t','--track'],rm:['-f','--cached']};
+  return Object.hasOwn(dedicated,command) ? dedicated[command] : [];
+}
