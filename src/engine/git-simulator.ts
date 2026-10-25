@@ -6,8 +6,9 @@ import { copyHistory, isAncestor, resolveRevision } from './revisions';
 import { advancedCommand } from './advanced-simulator';
 import { isIgnored } from './gitignore';
 import { diffLines } from 'diff';
+import { mergeContent } from './merge-content';
 import { fileStates } from './file-states';
-import { tokenizeCommand, validateCommandOptions } from './command-input';
+import { tokenizeCommand, validateCommandOptions, commandHelp } from './command-input';
 import { isUnmerged, hasUnmergedPaths, clearUnmergedPaths } from './conflicts';
 
 export interface ConflictResolutionSession {
@@ -125,6 +126,12 @@ export class GitEngine {
     if (parsed.error) return { success: false, message: parsed.error };
     const parts = parsed.tokens.map(token => token.text);
     if (parts[0] !== 'echo' && parsed.tokens.some(token => token.redirect)) return { success: false, message: 'このアプリの出力リダイレクトはecho "内容" > ファイルだけに対応しています。' };
+    if (parts[0] === 'help' || (parts[0] === 'git' && (parts[1] === 'help' || parts[1] === '--help' || parts[2] === '--help'))) {
+      const valid = parts[0] === 'help' ? parts.length === 1 : parts[1] === 'help' ? parts.length <= 3 : parts[1] === '--help' ? parts.length === 2 : parts.length === 3;
+      const topic = parts[1] === 'help' ? parts[2] : parts[2] === '--help' ? parts[1] : undefined;
+      const message = valid ? commandHelp(topic) : null;
+      return { success: !!message, message: message ?? '対応コマンドを git help または git help <command> で確認してください。' };
+    }
     if (this.state.patchSession) return parts.length === 1 && ['y', 'n', 'q'].includes(parts[0]) ? this.answerPatch(parts[0]) : { success: false, message: 'ハンクをy/nで選ぶか、qで終了してください。' };
     if (parts[0] === 'cd') return advancedCommand(this.state, 'cd', parts.slice(1))!;
     if (parts[0] === 'simulate' && parts[1] === 'rebase' && parts[2] === 'todo') return this.setRebaseTodo(parts.slice(3).join(' ').split(';').join('\n'));
@@ -574,31 +581,13 @@ export class GitEngine {
       const currentContent = currentCommit.tree[file];
       const targetContent = targetCommit.tree[file];
 
-      if (currentContent === targetContent) {
-        // 変更なし、または両側で同じ変更
-        if (currentContent !== undefined) {
-          newWD[file] = currentContent;
-          newIndex[file] = { path: file, status: 'staged', content: currentContent };
-        }
-      } else if (baseContent === currentContent) {
-        // ターゲットのみ変更（ターゲットを採用して安全）
-        if (targetContent !== undefined) {
-          newWD[file] = targetContent;
-          newIndex[file] = { path: file, status: 'staged', content: targetContent };
-        }
-      } else if (baseContent === targetContent) {
-        // 現在のみ変更（現在を保持して安全）
-        if (currentContent !== undefined) {
-          newWD[file] = currentContent;
-          newIndex[file] = { path: file, status: 'staged', content: currentContent };
-        }
-      } else {
-        // コンフリクト検出（両側で異なる変更）
+      const merged = mergeContent(baseContent, currentContent, targetContent, targetBranchName);
+      if (merged.content !== undefined) newWD[file] = merged.content;
+      if (merged.conflict) {
         hasConflict = true;
         conflictedPaths.push(file);
-        const conflictContent = `<<<<<<< HEAD\n${currentContent || ''}\n=======\n${targetContent || ''}\n>>>>>>> ${targetBranchName}`;
-        newWD[file] = conflictContent;
-        // コンフリクト時、ファイルはWDで更新されるがステージされない
+      } else if (merged.content !== undefined) {
+        newIndex[file] = { path: file, status: 'staged', content: merged.content };
       }
     }
 
@@ -1412,20 +1401,9 @@ export class GitEngine {
       const oursContent = ours.tree[file];
       const theirsContent = theirs.tree[file];
 
-      if (oursContent === theirsContent) {
-        if (oursContent !== undefined) newTree[file] = oursContent;
-      } else if (baseContent === oursContent) {
-        // Ours didn't change, accept Theirs
-        if (theirsContent !== undefined) newTree[file] = theirsContent;
-      } else if (baseContent === theirsContent) {
-        // Theirs didn't change, accept Ours
-        if (oursContent !== undefined) newTree[file] = oursContent;
-      } else {
-        hasConflict = true;
-        conflictedPaths.push(file);
-        // Simplified conflict content
-        newTree[file] = `<<<<<<< HEAD\n${oursContent || ''}\n=======\n${theirsContent || ''}\n>>>>>>> ${theirs.id.substring(0,7)}`;
-      }
+      const merged = mergeContent(baseContent, oursContent, theirsContent, theirs.id.substring(0, 7));
+      if (merged.content !== undefined) newTree[file] = merged.content;
+      if (merged.conflict) { hasConflict = true; conflictedPaths.push(file); }
     }
     return { tree: newTree, hasConflict, conflictedPaths };
   }

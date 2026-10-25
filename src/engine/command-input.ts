@@ -73,3 +73,29 @@ export function validateCommandOptions(command: string, args: string[]): string 
   }
   return null;
 }
+
+const specialHelp: Record<string, string> = {
+  status: 'git status [--ignored] — 作業ツリー・ステージ・未解消パスを確認',
+  commit: 'git commit -m "説明" [-m "本文"] [--amend [--no-edit]] — ステージを記録（対話エディタなし）',
+  switch: 'git switch <branch> / -c <new> [start] / --detach [commit] / --track <remote/branch>',
+  rm: 'git rm [-f] [--cached] [--] <file> — 追跡ファイルの削除・追跡解除',
+};
+const syntaxHelp: Record<string, string> = {
+  add: '<file...> / . / -A / -p [file]', branch: '[name [start]] / -a / -m [old] new / -d|-D name',
+  stash: '[push [-u] [-m "説明"]] / list / show|drop|apply|pop [stash@{番号}]',
+  remote: '[-v] / add name URL / remove name', fetch: '[remote] [branch] [--prune]',
+  pull: '[--rebase|--ff-only] [remote] [branch]', push: '[remote] [branch] [-u] [--tags|--delete|--force-with-lease]',
+  rebase: '[-i] <upstream> / --continue / --skip / --abort',
+  worktree: 'list / add [-b branch] path [start] / remove path',
+  bisect: 'start / good [commit] / bad [commit] / reset',
+  'sparse-checkout': 'init [--cone] / set directory... / list / disable',
+  submodule: 'add URL path / status / update [--init|--remote] [path...]', lfs: 'install / track [pattern]',
+};
+export const supportedCommands = [...Object.keys(options).filter(name => !name.includes(' ')), ...Object.keys(specialHelp)].sort();
+export function commandHelp(command?: string): string | null {
+  if (!command) return `このアプリの対応コマンド: ${supportedCommands.join('、')}\n詳しくは git help <command> または git <command> --help。\n模擬GitHub: gh pr create/view/checks/merge/close（--mergeのみ）。simulate review approve|request-changes / simulate ci pass|fail。\nファイル操作: touch <file>、echo "内容" > <file>、rm <file>、ls。cd <仮想worktree>、clear。\n任意のシェル・実GitHub・実ネットワークは実行しません。`;
+  if (Object.hasOwn(specialHelp, command)) return specialHelp[command];
+  if (!Object.hasOwn(options, command) || command.includes(' ')) return null;
+  const spec = options[command];
+  return `git ${command} ${syntaxHelp[command] ?? '[対象]'}\n対応オプション: ${[...spec.flags, ...spec.values ?? [], ...spec.assignments ?? []].join('、') || 'なし'}\n実Gitの全構文には対応していません。引用符で空白を含む値を指定できます。パイプ・コマンド連結・追記は未対応です。`;
+}

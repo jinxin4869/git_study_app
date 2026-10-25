@@ -1,5 +1,6 @@
 import { CommandResult, GitState, Scenario } from '@/types/git';
 import { headTree, indexTree, cleanTrackedFiles, normalizeCommand } from './git-state';
+import { tokenizeCommand } from './command-input';
 import { hasUnmergedPaths } from './conflicts';
 
 /**
@@ -281,6 +282,8 @@ export const assessGoal = (state: GitState, scenario: Scenario, lastCommand?: st
     }
   }
   if (conditions.length === 0) add('state', '指定された状態を満たす');
+  const words = tokenizeCommand(lastCommand ?? '').tokens.map(token => token.text);
+  if (words[0] === 'help' || (words[0] === 'git' && (words[1] === 'help' || words[1] === '--help' || words[2] === '--help'))) conditions.push({id:'help',label:'helpの参照後、課題の操作を実行する',met:false});
   if (result && !result.success && !(goal.type === 'conflict_present' && result.newState && matchesGoal(state, scenario, lastCommand))) {
     conditions.push({ id: 'execution', label: '最後の操作を成功させる（失敗した操作では合格しません）', met: false });
   }

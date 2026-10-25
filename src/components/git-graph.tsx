@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { GitState } from '@/types/git';
+import { trackingStatus } from '@/learning/repository-view';
 import { calculateGraphLayout } from '@/utils/graph-layout';
 
 interface GitGraphProps {
@@ -12,21 +13,37 @@ interface GitGraphProps {
 export function GitGraph({ state }: GitGraphProps) {
   const reducedMotion = useReducedMotion();
   const { nodes, links } = useMemo(() => {
-    return calculateGraphLayout(state);
+    const layout = calculateGraphLayout(state);
+    const counts = new Map<number, number>();
+    for (const id of [...Object.values(state.branches), ...Object.values(state.remoteBranches), ...Object.values(state.tags ?? {}).map(tag => tag.commitId)]) {
+      const node = layout.nodes.find(item => item.id === id);
+      if (node) counts.set(node.y, (counts.get(node.y) ?? 0) + 1);
+    }
+    // Reserve separate label rows within each lane, including refs on different commits.
+    const spacing = Math.max(50, Math.max(1, ...counts.values()) * 20 + 35);
+    for (const node of layout.nodes) node.y = 50 + ((node.y - 50) / 50) * spacing;
+    return layout;
   }, [state]);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const headLabelRef = useRef<SVGRectElement>(null);
   const headId = state.HEAD.type === 'branch' ? state.branches[state.HEAD.value] : state.HEAD.value;
   const headNode = nodes.find(node => node.id === headId);
-  const branchLabels = Object.entries(state.branches).flatMap(([name, id], index) => {
+  const labelRows = new Map<number, number>();
+  const references = [
+    ...Object.entries(state.branches).map(([name, id]) => ({ name, id, kind: 'local' })),
+    ...Object.entries(state.remoteBranches).map(([name, id]) => ({ name, id, kind: 'remote' })),
+    ...Object.entries(state.tags ?? {}).map(([name, tag]) => ({ name, id: tag.commitId, kind: 'tag' })),
+  ];
+  const branchLabels = references.flatMap(({ name, id, kind }) => {
     const node = nodes.find(node => node.id === id);
     if (!node) return [];
-    const isHead = state.HEAD.type === 'branch' && state.HEAD.value === name;
-    const text = isHead ? `${name} (HEAD)` : name;
-    // Allow room for the whole label, including HEAD and non-ASCII branch names.
+    const isHead = kind === 'local' && state.HEAD.type === 'branch' && state.HEAD.value === name;
+    const text = isHead ? `${name} (HEAD)` : kind === 'remote' ? `${name} (remote)` : kind === 'tag' ? `tag: ${name}` : name;
     const width = [...text].reduce((sum, char) => sum + (char.charCodeAt(0) > 127 ? 12 : 7), 16);
-    return [{ name, node, isHead, text, width, y: node.y - 15 + index * 20 }];
+    const row = labelRows.get(node.y) ?? 0;
+    labelRows.set(node.y, row + 1);
+    return [{ name: `${kind}:${name}`, node, isHead, text, width, y: node.y - 15 + row * 20, kind }];
   });
   const graphWidth = Math.max(800, nodes.length * 100, ...branchLabels.map(label => label.node.x + 10 + label.width + 24));
   const graphHeight = Math.max(400, ...nodes.map(node => node.y + 60), ...branchLabels.map(label => label.y + 50));
@@ -48,6 +65,10 @@ export function GitGraph({ state }: GitGraphProps) {
 
   return (
     <div ref={viewportRef} role="region" aria-label="コミットグラフ" tabIndex={0} className="focus-visible:outline-2 focus-visible:outline-blue-400 w-full h-full bg-gray-900 overflow-auto p-4">
+      <div aria-label="リモートとの比較" className="mb-3 text-sm text-gray-200">
+        <p>ローカル・remote（取得済みの参照）・tagを表示します。remoteはfetchするまで更新されません。</p>
+        {trackingStatus(state).map(item => <p key={item.branch}>{item.branch} → {item.upstream}: {item.available ? `ahead ${item.ahead} / behind ${item.behind}` : '参照未取得'}</p>)}
+      </div>
       <svg role="img" aria-label="コミットの親子とブランチの位置" width={graphWidth} height={graphHeight} className="min-w-full min-h-full">
         <desc>{`HEADは${state.HEAD.type === 'branch' ? 'ブランチ' : 'コミット'} ${state.HEAD.value}。` +
           Object.entries(state.branches).map(([name, id]) => `ブランチ ${name} は ${id || '未作成のコミット'}。`).join('') +
@@ -108,7 +129,7 @@ export function GitGraph({ state }: GitGraphProps) {
         ))}
         
         {/* Branch Labels & HEAD */}
-        {branchLabels.map(({ name, node, isHead, text, width, y }) => (
+        {branchLabels.map(({ name, node, isHead, text, width, y, kind }) => (
           <g key={`branch-${name}`}>
             <rect
               ref={isHead ? headLabelRef : undefined}
@@ -117,7 +138,7 @@ export function GitGraph({ state }: GitGraphProps) {
               width={width}
               height={18}
               rx={4}
-              fill={isHead ? '#047857' : '#4B5563'}
+              fill={isHead ? '#047857' : kind === 'remote' ? '#1e40af' : kind === 'tag' ? '#92400e' : '#4B5563'}
             />
             <text x={node.x + 18} y={y + 12} fill="white" fontSize="10" fontWeight="bold" className="font-mono">
               {text}
