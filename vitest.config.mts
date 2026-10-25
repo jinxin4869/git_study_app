@@ -7,6 +7,12 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/**/*.d.ts', 'src/types/**', 'src/engine/test-simulator.ts'],
+      reporter: ['text', 'html', 'json-summary'],
+    },
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
