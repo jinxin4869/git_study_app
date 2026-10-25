@@ -82,12 +82,12 @@ const specialHelp: Record<string, string> = {
   rm: 'git rm [-f] [--cached] [--] <file> — 追跡ファイルの削除・追跡解除',
 };
 const syntaxHelp: Record<string, string> = {
+  clean: '-n [-d] / --dry-run [-d]（確認のみ。実削除・パス指定には未対応）',
   add: '<file...> / . / -A / -p [file]', branch: '[name [start]] / -a / -m [old] new / -d|-D name',
   stash: '[push [-u] [-m "説明"]] / list / show|drop|apply|pop [stash@{番号}]',
   remote: '[-v] / add name URL / remove name', fetch: '[remote] [branch] [--prune]',
   pull: '[--rebase|--ff-only] [remote] [branch]', push: '[remote] [branch] [-u] [--tags|--delete|--force-with-lease]',
   rebase: '[-i] <upstream> / --continue / --skip / --abort',
-  clean: '-n [-d] / --dry-run [-d]（確認のみ。実削除・パス指定には未対応）',
   worktree: 'list / add [-b branch] path [start] / remove path',
   bisect: 'start / good [commit] / bad [commit] / reset',
   'sparse-checkout': 'init [--cone] / set directory... / list / disable',
