@@ -10,7 +10,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/**/*.test.{ts,tsx}', 'src/**/*.d.ts', 'src/types/**', 'src/engine/test-simulator.ts'],
+      exclude: ['src/**/*.test.{ts,tsx}', 'src/**/*.d.ts', 'src/types/**', 'src/engine/test-simulator.ts', 'src/engine/invariant-test-helpers.ts'],
       reporter: ['text', 'html', 'json-summary'],
     },
     alias: {
