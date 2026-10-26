@@ -91,7 +91,7 @@ gh pr merge 1 --merge
 
 実装・保存形式・検証範囲は [学習体験改善の記録](docs/learning_experience.md)、今回の教材・入力・操作性は [改善記録](docs/learning_refinements.md)、全候補の分類は [残作業ロードマップ](docs/remaining_work_roadmap.md) を参照してください。
 
-マージ後に確認した公開版、保存・競合・引数検証の追加修正と残る制約は [マージ後の再評価記録](docs/post_merge_review.md) を参照してください。ロードマップは末尾の最新節を使用し、以前の分類は調査履歴として残しています。
+マージ後に確認した公開版、保存・競合・引数検証の追加修正と残る制約は [マージ後の再評価記録](docs/post_merge_review.md) を参照してください。ロードマップは冒頭の最新ステータス表を使用し、完了日・関連PR・一部完了の残件を確認できます。以前の分類は調査履歴として残しています。
 
 依存更新PR #7〜11と修正PR #12はmainへ取込済みです。2026-10-04の公開版確認・再監査は [最新の公開確認記録](docs/post_release_verification.md)、未完了の実機IME・読み上げ・Safari等は [実機確認の手順と結果票](docs/manual_device_checks.md) を参照してください。
 

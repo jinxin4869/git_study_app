@@ -1,6 +1,30 @@
 # 残作業と拡張候補の検討（2026-10-03 JST）
 
-現行状況は[軽量改善の対応と残件](lightweight_improvements.md)、末尾の2026-10-25節と[一括改善記録](batch_improvements.md)。以下の調査と過去PR作業時点の分類は履歴として保持する。
+現行状況は以下の最新節と[軽量改善の対応と残件](lightweight_improvements.md)を参照。以下の調査と過去PR作業時点の分類は履歴として保持する。
+
+## 完了状況の更新（2026-10-26 JST）
+
+確認対象はmain `61756dc`。PR#16〜#29はすべてマージ済み。完了した対応は削除せず、完了日・関連PR・対応範囲を[完了した対応の記録](lightweight_improvements.md)へ残し、通常の残作業一覧から外す。日付はマージ日のJST。「一部完了」は実装済み範囲と残件を別に記載する。
+
+| 対象 | 現在のステータス | 完了した範囲 / 関連PR | 完了日・最新反映日（JST） |
+| --- | --- | --- | --- |
+| P03/P05、L09/L11、U01/U03/U05/U11、G01/G14、E01 | 完了（記載範囲） | 明示checkpoint・持ち出し、理解確認・比較表、3領域比較・競合編集・remote表示・演習URL、行単位merge・実Gitラボ・対応help。[#16](https://github.com/jinxin4869/git_study_app/pull/16)の[実装範囲](batch_improvements.md) | 2026-10-25 |
+| U02 | 完了 | 通常ファイルの作成・複数行編集・削除。[#20](https://github.com/jinxin4869/git_study_app/pull/20) | 2026-10-25 |
+| U06 | 完了（記載範囲） | ズーム・全体/HEAD表示・コミット詳細。[#19](https://github.com/jinxin4869/git_study_app/pull/19) | 2026-10-25 |
+| U07 | 完了（記載範囲） | help・補完・履歴検索・出力コピー。[#16](https://github.com/jinxin4869/git_study_app/pull/16)・[#17](https://github.com/jinxin4869/git_study_app/pull/17)・[#18](https://github.com/jinxin4869/git_study_app/pull/18) | 2026-10-25 |
+| D04 | 完了（記載範囲） | 貢献手順・報告フォーム・PRテンプレート・非公開情報の報告方針。[#26](https://github.com/jinxin4869/git_study_app/pull/26) | 2026-10-26 |
+| L06 | 一部完了 | 探索・所要時間の目安は[#16](https://github.com/jinxin4869/git_study_app/pull/16)。難易度再分類・所要時間の実測は残る | 2026-10-25 |
+| G04/G08/G09 | 一部完了 | Draft・移植元記録・cleanのdry-runは[#25](https://github.com/jinxin4869/git_study_app/pull/25)・[#24](https://github.com/jinxin4869/git_study_app/pull/24)・[#29](https://github.com/jinxin4869/git_study_app/pull/29)。各テーマの追加教材・操作は残る | 2026-10-26 |
+| E05 | 一部完了 | ID衝突防止は[#28](https://github.com/jinxin4869/git_study_app/pull/28)。時刻/ID生成器全体の注入等は残る | 2026-10-26 |
+| E06/T09 | 一部完了 | 計測・基本/高度な固定seed列・全139教材・保存境界は[#21](https://github.com/jinxin4869/git_study_app/pull/21)・[#22](https://github.com/jinxin4869/git_study_app/pull/22)。未検証経路は必要性を評価して追加 | 2026-10-26 |
+| O01/O02 | 一部完了 | Node上の合成履歴計測は[#23](https://github.com/jinxin4869/git_study_app/pull/23)。ブラウザ描画・長時間・端末差の実測は残る | 2026-10-26 |
+| D06 | 一部完了 | 依存/フォント/画像の棚卸しは[#27](https://github.com/jinxin4869/git_study_app/pull/27)。9種の本文とnative再配布時の条件は未確認 | 2026-10-26 |
+
+今回更新していない過去の対応済み項目の分類は引き継ぐ。全98候補の再集計ではなく、完了した追加対応から反映したもの。**以前の「後回し38件」「未マージ」等を現在の残件数や状態として使わない**。[一部完了の残件](lightweight_improvements.md)と[未着手・保留／対象外](lightweight_improvements.md)を分けて確認する。
+
+## 過去の調査と対応履歴
+
+以下は各節の日付・対象版時点の記録。最新状況は上の表を優先する。
 
 ## 調査後の対応状況（2026-10-03）
 
