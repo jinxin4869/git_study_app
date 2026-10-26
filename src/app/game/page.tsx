@@ -329,7 +329,7 @@ function LearningSession() {
     commandRef.current?.focus();
   };
   const openHint = () => {
-    if (!currentScenario || hintLevel >= 4) return;
+    if (!currentScenario || currentScenario.practiceMode === 'independent' || hintLevel >= 4) return;
     const next = hintLevel + 1;
     setHintUsage(previous => new Map(previous).set(currentScenario.id, Math.max(next,previous.get(currentScenario.id) ?? 0)));
     setHintLevel(next);
@@ -593,12 +593,14 @@ function LearningSession() {
               </li>)}
             </ul>
             <div className="mt-3">
+              {currentScenario.practiceMode === 'independent' ? <p className="text-gray-300">この総合課題ではヒントを表示しません。達成条件と状態から操作を選んでください。達成後に解答例を確認できます。</p> : <>
               <p className="text-gray-300">ヒントは必要なときだけ開けます。</p>
               {hints.slice(0, hintLevel).map((hint, index) => <div key={hint.title} id={`hint-${index}`} className="mt-2">
                 <h2 className="font-bold text-blue-200">{index + 1}. {hint.title}</h2>
                 <p className="whitespace-pre-wrap break-words text-gray-300">{hint.text}</p>
               </div>)}
               <button tabIndex={0} onClick={openHint} disabled={hintLevel >= 4} aria-expanded={hintLevel > 0} className="min-h-11 mt-1 px-3 border border-blue-500/50 rounded text-blue-200 disabled:opacity-50">{hintLevel < 4 ? `ヒント ${hintLevel + 1}: ${hints[hintLevel]?.title}を開く` : 'すべてのヒントを表示中'}</button>
+              </>}
             </div>
             {isGoalMet && (
               <section aria-label="完了後の解説" className="mt-3 space-y-2">
@@ -611,6 +613,7 @@ function LearningSession() {
                 <CheckCircle className="w-4 h-4" />
                 演習を達成しました！
               </motion.div>
+              {currentScenario.practiceMode === 'independent' ? <details><summary tabIndex={0} className="min-h-11 cursor-pointer">総合課題の解答例</summary><p className="whitespace-pre-wrap break-words">{currentScenario.solution?.join('\n')}</p><p>これは一例です。必要な状態を満たす別の手順でも達成できます。</p></details> : null}
               <h2 className="font-bold text-green-300">なぜ達成したか</h2>
               <p className="text-gray-300">{lessonNotes[currentScenario.id].concept}</p>
               <details className="text-gray-300">

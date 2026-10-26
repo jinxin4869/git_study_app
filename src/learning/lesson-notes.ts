@@ -2,6 +2,8 @@
 export interface LessonNote { concept: string; verify: string; caution: string }
 const note = (concept: string, verify: string, caution: string): LessonNote => ({ concept, verify, caution });
 export const lessonNotes: Record<string, LessonNote> = {
+  'capstone-selective-delivery': note('公開する修正と手元に残す編集を分け、必要なファイルだけを新しい作業先で記録します。', 'deliveryとorigin/deliveryのReady、公開文書とKeep、手元のDraft docsとPrivate memoを確認します。', '作業ツリーと公開コミットの差を読みます。まとめてstageすると非公開の下書きも記録されるため対象を選びます。'),
+  'capstone-shared-recovery': note('共有済みの変更を逆向きの記録で取り消し、手元のメモを公開履歴から分離して保持します。', 'Bugの後の取り消し履歴、共有先のBaseとKeep、手元のPrivate memoと空のstashを確認します。', '手元を以前の版に戻すだけでは共有先を修正できません。履歴を残すことと未公開内容の保持を両方確認します。'),
   'mistake-stale-index': note('記録予定の版と手元の最新版が違います。三つの領域を読み、必要な内容を選び直します。', 'HEADのapp.tsがFixed、notes.mdがKeepで追跡ファイルに差が残らないことを確認します。', 'コミットは最後にstageした内容を使います。手元の編集を読み、試行のDraftを記録しないよう確認します。'),
   'mistake-wrong-branch': note('作業先を間違えても、必要なコミットを正しいブランチで保護してから元の参照を戻せます。', 'featureがc2、mainがc1で、作業場所がfeatureのFixedになったことを確認します。', '共有前のローカル課題です。共有済みのmainを同じように巻き戻してよいという意味ではありません。'),
   'mistake-stale-approval': note('承認と確認の対象が最新版かを見ます。古い版の成功だけでは修正した内容の確認になりません。', '最新版への承認とCI成功、統合先のReviewed fixとKeepを確認します。', 'この模擬環境は最新コミットへの再確認を要求します。実GitHubの動作は保護設定にも依存します。'),

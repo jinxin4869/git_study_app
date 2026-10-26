@@ -1,3 +1,4 @@
+import { capstoneScenarios } from './capstone-scenarios';
 import { mistakeScenarios } from './mistake-scenarios';
 import { Scenario } from '@/types/git';
 import { practicalScenarios } from './practical-scenarios';
@@ -1100,3 +1101,5 @@ scenarios.push(...precisionScenarios);
 scenarios.push(...workflowScenarios);
 
 scenarios.push(...mistakeScenarios);
+
+scenarios.push(...capstoneScenarios);
