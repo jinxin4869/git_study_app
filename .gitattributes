@@ -1,0 +1,5 @@
+LICENSE text eol=lf
+src/app/fonts.css text eol=lf
+src/app/icon.svg text eol=lf
+public/fonts/*.woff2 binary
+public/licenses/** -text -whitespace

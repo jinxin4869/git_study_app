@@ -1,0 +1,110 @@
+{
+  "recordedOn": "2026-10-25",
+  "scope": "Three font licenses and direct package dependencies only",
+  "fonts": {
+    "repository": "google/fonts",
+    "revision": "e7db6ca603fd4862010383ff17ffd6cc4ffac1c0",
+    "licenses": [
+      {
+        "family": "geist",
+        "source": "https://raw.githubusercontent.com/google/fonts/e7db6ca603fd4862010383ff17ffd6cc4ffac1c0/ofl/geist/OFL.txt",
+        "file": "public/licenses/fonts/geist-OFL.txt",
+        "sha256": "1781d2806a07d91c4edf4740b88449fab7d0eadad53f7c351b94cd4d4eb8c00f"
+      },
+      {
+        "family": "geistmono",
+        "source": "https://raw.githubusercontent.com/google/fonts/e7db6ca603fd4862010383ff17ffd6cc4ffac1c0/ofl/geistmono/OFL.txt",
+        "file": "public/licenses/fonts/geistmono-OFL.txt",
+        "sha256": "1781d2806a07d91c4edf4740b88449fab7d0eadad53f7c351b94cd4d4eb8c00f"
+      },
+      {
+        "family": "notosansjp",
+        "source": "https://raw.githubusercontent.com/google/fonts/e7db6ca603fd4862010383ff17ffd6cc4ffac1c0/ofl/notosansjp/OFL.txt",
+        "file": "public/licenses/fonts/notosansjp-OFL.txt",
+        "sha256": "1c05c68c34f9708415aada51f17e1b0092d2cea709bf4a94cd38114f9e73d7d9"
+      }
+    ]
+  },
+  "packages": [
+    {
+      "name": "@types/diff",
+      "version": "7.0.2",
+      "license": "MIT",
+      "source": "node_modules/@types/diff/LICENSE",
+      "file": "public/licenses/packages/types-diff.txt",
+      "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+    },
+    {
+      "name": "canvas-confetti",
+      "version": "1.9.4",
+      "license": "ISC",
+      "source": "node_modules/canvas-confetti/LICENSE",
+      "file": "public/licenses/packages/canvas-confetti.txt",
+      "sha256": "fd44477c30a832a1dee9ef0b6cfb34677fbe5ef58c0cf655d27c646f11bb2f7a"
+    },
+    {
+      "name": "clsx",
+      "version": "2.1.1",
+      "license": "MIT",
+      "source": "node_modules/clsx/license",
+      "file": "public/licenses/packages/clsx.txt",
+      "sha256": "9a9edad7baae52622bddf3c15b2ef8a33d2c89f2d25408ad13e8a7481c6b0c97"
+    },
+    {
+      "name": "diff",
+      "version": "8.0.4",
+      "license": "BSD-3-Clause",
+      "source": "node_modules/diff/LICENSE",
+      "file": "public/licenses/packages/diff.txt",
+      "sha256": "eda81a415869e67809f6a9f3fd6056062cb83a462118e07eec5e92b2e0c40ce9"
+    },
+    {
+      "name": "framer-motion",
+      "version": "12.23.24",
+      "license": "MIT",
+      "source": "node_modules/framer-motion/LICENSE.md",
+      "file": "public/licenses/packages/framer-motion.txt",
+      "sha256": "5ff46083b88563822b0560dd6221ab89d2f74bc97a52d4c97a75020fd62c6f32"
+    },
+    {
+      "name": "lucide-react",
+      "version": "1.49.0",
+      "license": "ISC",
+      "source": "node_modules/lucide-react/LICENSE",
+      "file": "public/licenses/packages/lucide-react.txt",
+      "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57"
+    },
+    {
+      "name": "next",
+      "version": "15.5.28",
+      "license": "MIT",
+      "source": "node_modules/next/license.md",
+      "file": "public/licenses/packages/next.txt",
+      "sha256": "ee765244e2d59f5234d474f62e0766fa0c8b99af967fdd4c0cb8dcb0c76ea224"
+    },
+    {
+      "name": "react",
+      "version": "19.3.0",
+      "license": "MIT",
+      "source": "node_modules/react/LICENSE",
+      "file": "public/licenses/packages/react.txt",
+      "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+    },
+    {
+      "name": "react-dom",
+      "version": "19.3.0",
+      "license": "MIT",
+      "source": "node_modules/react-dom/LICENSE",
+      "file": "public/licenses/packages/react-dom.txt",
+      "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+    },
+    {
+      "name": "tailwind-merge",
+      "version": "3.7.0",
+      "license": "MIT",
+      "source": "node_modules/tailwind-merge/LICENSE.md",
+      "file": "public/licenses/packages/tailwind-merge.txt",
+      "sha256": "d4c70c7ce38cea8778f0aed3fc0bef0a9dbd27f13bd8b6773cbd6d37941971e5"
+    }
+  ]
+}
