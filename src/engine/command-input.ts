@@ -33,6 +33,7 @@ export function tokenizeCommand(command: string): { tokens: CommandToken[]; erro
 /** Flags actually read by the simulator. Status/commit/switch/rm retain their detailed validators. */
 const options: Record<string, { flags: string[]; values?: string[]; assignments?: string[] }> = {
   init: { flags: [] }, clone: { flags: [] }, add: { flags: ['-A', '-f', '-p', '--patch'] },
+  clean: { flags: ['-n', '--dry-run', '-d', '-nd', '-dn'] },
   log: { flags: ['--oneline', '--graph', '--all'], values: ['--grep'] },
   diff: { flags: ['--cached', '--staged', '--name-only'] }, show: { flags: [] }, reflog: { flags: [] }, blame: { flags: [] },
   branch: { flags: ['-a', '-m', '-d', '-D'] }, checkout: { flags: ['-b', '--detach'] },
@@ -82,6 +83,7 @@ const specialHelp: Record<string, string> = {
   rm: 'git rm [-f] [--cached] [--] <file> — 追跡ファイルの削除・追跡解除',
 };
 const syntaxHelp: Record<string, string> = {
+  clean: '-n [-d] / --dry-run [-d]（確認のみ。実削除・パス指定には未対応）',
   add: '<file...> / . / -A / -p [file]', branch: '[name [start]] / -a / -m [old] new / -d|-D name',
   stash: '[push [-u] [-m "説明"]] / list / show|drop|apply|pop [stash@{番号}]',
   remote: '[-v] / add name URL / remove name', fetch: '[remote] [branch] [--prune]',
