@@ -18,7 +18,8 @@ export function commandSuggestions(input: string, state: GitState): CommandSugge
   if (!words.length) choices = ['git','gh','simulate','touch','echo','rm','ls','cd','clear','help'];
   else if (words.length === 1 && words[0] === 'git') choices = [...supportedCommands,'help','--help'];
   else if (words.length === 1 && words[0] === 'gh') choices = ['pr'];
-  else if (words.join(' ') === 'gh pr') choices = ['create','view','checks','merge','close'];
+  else if (words.join(' ') === 'gh pr') choices = ['create','view','checks','ready','merge','close'];
+  else if (words[0] === 'gh' && words[1] === 'pr' && words.length >= 3 && prefix.startsWith('-')) choices = completionFlags(words.slice(0,3).join(' '));
   else if (words.length === 1 && words[0] === 'simulate') choices = ['review','ci','rebase'];
   else if (words.join(' ') === 'simulate review') choices = ['approve','request-changes'];
   else if (words.join(' ') === 'simulate ci') choices = ['pass','fail'];

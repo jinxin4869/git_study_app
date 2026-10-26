@@ -21,11 +21,10 @@ const change = (value: unknown) => object(value) && text(value.path) && ['unmodi
 const index = (value: unknown) => map(value, (entry, key) => change(entry) && (entry as Record<string, unknown>).path === key);
 const optional = (value: Record<string, unknown>, key: string, check: (item: unknown) => boolean) => value[key] === undefined || check(value[key]);
 const stateFields = new Set(['commits','branches','HEAD','index','workingDirectory','detachedHead','stash','remotes','remoteBranches','mockServers','unmergedPaths','patchSession','worktrees','activeWorktree','submodules','lfs','sparseCheckout','bisect','lastBisectFound','operation','config','upstreams','tags','reflog','github','pendingMerge']);
-function validState(value: unknown, depth = 0): value is GitState {
-  if (depth > 4 || !object(value) || Object.keys(value).some(key => !stateFields.has(key))) return false;
-  const commit = (item: unknown, key: string) => object(item) && item.id === key && text(item.message) && strings(item.parents) && number(item.timestamp) && text(item.author) && tree(item.tree) && Array.isArray(item.changes) && item.changes.every(change);
-  if (!map(value.commits, commit) || !tree(value.branches) || !object(value.HEAD) || !['branch','commit'].includes(String(value.HEAD.type)) || !text(value.HEAD.value) || !index(value.index) || !tree(value.workingDirectory) || typeof value.detachedHead !== 'boolean' || !tree(value.remotes) || !tree(value.remoteBranches)) return false;
-  const commits = value.commits as Record<string, { parents: string[] }>;
+const commitShape = (item: unknown, key: string) => object(item) && item.id === key && text(item.message) && strings(item.parents) && number(item.timestamp) && text(item.author) && tree(item.tree) && Array.isArray(item.changes) && item.changes.every(change);
+function validCommitGraph(value: unknown): value is Record<string, { parents: string[] }> {
+  if (!map(value, commitShape)) return false;
+  const commits = value as Record<string, { parents: string[] }>;
   // Both dangling parents and cycles can hang history/graph traversal.
   const done = new Set<string>();
   const visiting = new Set<string>();
@@ -36,27 +35,40 @@ function validState(value: unknown, depth = 0): value is GitState {
       const [current, exiting] = pending.pop()!;
       if (exiting) { visiting.delete(current); done.add(current); continue; }
       if (done.has(current)) continue;
-      if (!commits[current] || visiting.has(current)) return false;
+      if (!Object.hasOwn(commits, current) || visiting.has(current)) return false;
       visiting.add(current); pending.push([current, true]);
       for (const parent of commits[current].parents) pending.push([parent, false]);
     }
   }
+  return true;
+}
+function validState(value: unknown, depth = 0): value is GitState {
+  if (depth > 4 || !object(value) || Object.keys(value).some(key => !stateFields.has(key))) return false;
+  if (!validCommitGraph(value.commits) || !tree(value.branches) || !object(value.HEAD) || !['branch','commit'].includes(String(value.HEAD.type)) || !text(value.HEAD.value) || !index(value.index) || !tree(value.workingDirectory) || typeof value.detachedHead !== 'boolean' || !tree(value.remotes) || !tree(value.remoteBranches)) return false;
+  const commits = value.commits as Record<string, { parents: string[] }>;
+  if (value.detachedHead !== (value.HEAD.type === 'commit')) return false;
   const reference = (id: unknown) => text(id) && (id === '' || Object.hasOwn(commits, id));
+  const resolvedReference = (id: unknown) => text(id) && !!id && Object.hasOwn(commits, id);
+  if (object(value.pendingMerge) && !resolvedReference(value.pendingMerge.targetId)) return false;
+  if (object(value.bisect) && ['good','bad','found'].some(key => (value.bisect as Record<string, unknown>)[key] !== undefined && !resolvedReference((value.bisect as Record<string, unknown>)[key]))) return false;
+  if (object(value.operation) && ((Array.isArray(value.operation.remaining) && value.operation.remaining.some(id => !resolvedReference(id))) || (object(value.operation.current) && !resolvedReference(value.operation.current.id)))) return false;
   if (!map(value.branches, reference) || !map(value.remoteBranches, reference)) return false;
-  if (value.HEAD.type === 'branch' ? !Object.hasOwn(value.branches as object, value.HEAD.value) : !reference(value.HEAD.value)) return false;
-  const server = (item: unknown) => object(item) && tree(item.branches) && map(item.commits, commit) && optional(item, 'tags', tags);
-  const tags = (item: unknown) => map(item, tag => object(tag) && text(tag.commitId) && optional(tag, 'message', text));
+  if (value.HEAD.type === 'branch' ? !Object.hasOwn(value.branches as object, value.HEAD.value) : !resolvedReference(value.HEAD.value)) return false;
+  const validTags = (item: unknown, history: Record<string, { parents: string[] }>) => map(item, tag => object(tag) && text(tag.commitId) && !!tag.commitId && Object.hasOwn(history, tag.commitId) && optional(tag, 'message', text));
+  const tags = (item: unknown) => validTags(item, commits);
+  const server = (item: unknown) => object(item) && validCommitGraph(item.commits) && map(item.branches, id => text(id) && (id === '' || Object.hasOwn(item.commits as object, id))) && optional(item, 'tags', value => validTags(value, item.commits as Record<string, { parents: string[] }>));
   if (!map(value.mockServers, server) || !Array.isArray(value.stash) || !value.stash.every(item => object(item) && text(item.id) && text(item.message) && number(item.timestamp) && index(item.index) && tree(item.workingDirectory) && optional(item,'baseTree',tree))) return false;
   if (!optional(value,'unmergedPaths',strings) || !optional(value,'sparseCheckout',strings) || !optional(value,'config',tree) || !optional(value,'upstreams',tree) || !optional(value,'tags',tags) || !optional(value,'activeWorktree',text) || !optional(value,'lastBisectFound',text)) return false;
-  if (!optional(value,'reflog', item => Array.isArray(item) && item.every(entry => object(entry) && text(entry.id) && text(entry.command)))) return false;
+  if (!optional(value,'reflog', item => Array.isArray(item) && item.every(entry => object(entry) && text(entry.id) && !!entry.id && reference(entry.id) && text(entry.command)))) return false;
   if (!optional(value,'pendingMerge', item => object(item) && reference(item.targetId) && tree(item.workingDirectory) && index(item.index))) return false;
-  if (!optional(value,'operation', item => object(item) && ['rebase','cherry-pick','revert'].includes(String(item.kind)) && validState(item.original,depth+1) && strings(item.remaining) && item.remaining.every(reference) && optional(item,'todo',text) && optional(item,'awaiting', x => ['todo','edit','reword'].includes(String(x))) && optional(item,'actions', x => map(x, action => ['pick','reword','edit','squash','fixup','drop'].includes(String(action)))) && optional(item,'current', x => object(x) && reference(x.id) && text(x.message) && optional(x,'committed',v=>typeof v==='boolean') && optional(x,'amend',v=>typeof v==='boolean')))) return false;
+  if (!optional(value,'operation', item => object(item) && ['rebase','cherry-pick','revert'].includes(String(item.kind)) && validState(item.original,depth+1) && strings(item.remaining) && item.remaining.every(reference) && optional(item,'recordOrigin', flag => typeof flag==='boolean' && item.kind==='cherry-pick') && optional(item,'todo',text) && optional(item,'awaiting', x => ['todo','edit','reword'].includes(String(x))) && optional(item,'actions', x => map(x, action => ['pick','reword','edit','squash','fixup','drop'].includes(String(action)))) && optional(item,'current', x => object(x) && reference(x.id) && text(x.message) && optional(x,'committed',v=>typeof v==='boolean') && optional(x,'amend',v=>typeof v==='boolean')))) return false;
   if (!optional(value,'bisect', item => object(item) && validState(item.original,depth+1) && ['good','bad','found'].every(key => optional(item,key,reference)))) return false;
   if (!optional(value,'patchSession', item => object(item) && text(item.path) && number(item.cursor) && Array.isArray(item.chunks) && item.cursor < item.chunks.length && item.chunks.every(chunk => object(chunk) && text(chunk.before) && text(chunk.after) && typeof chunk.changed === 'boolean' && optional(chunk,'selected',x=>typeof x==='boolean')))) return false;
-  if (!optional(value,'worktrees', item => map(item, entry => object(entry) && text(entry.branch) && tree(entry.workingDirectory) && index(entry.index)))) return false;
+  if (!optional(value,'worktrees', item => map(item, entry => object(entry) && text(entry.branch) && Object.hasOwn(value.branches as object, entry.branch) && tree(entry.workingDirectory) && index(entry.index)))) return false;
+  if (value.activeWorktree !== undefined && (!object(value.worktrees) || !Object.hasOwn(value.worktrees, value.activeWorktree as string))) return false;
   if (!optional(value,'submodules', item => map(item, entry => object(entry) && text(entry.url) && text(entry.commitId) && typeof entry.initialized === 'boolean'))) return false;
   if (!optional(value,'lfs', item => object(item) && typeof item.installed === 'boolean' && strings(item.patterns))) return false;
-  if (!optional(value,'github', item => object(item) && typeof item.requireReview === 'boolean' && typeof item.requireCI === 'boolean' && map(item.pullRequests, pr => object(pr) && number(pr.number) && ['title','body','base','head','headCommit'].every(key => text(pr[key])) && ['open','merged','closed'].includes(String(pr.status)) && optional(pr,'review', x=>object(x) && text(x.commitId) && ['approved','changes_requested'].includes(String(x.result)) && text(x.body)) && optional(pr,'checks',x=>object(x) && text(x.commitId) && ['success','failure'].includes(String(x.status)))))) return false;
+  if (!optional(value,'github', item => object(item) && typeof item.requireReview === 'boolean' && typeof item.requireCI === 'boolean' && map(item.pullRequests, pr => object(pr) && number(pr.number) && ['title','body','base','head','headCommit'].every(key => text(pr[key])) && ['open','merged','closed'].includes(String(pr.status)) && optional(pr,'draft', flag=>typeof flag==='boolean') && optional(pr,'review', x=>object(x) && text(x.commitId) && ['approved','changes_requested'].includes(String(x.result)) && text(x.body)) && optional(pr,'checks',x=>object(x) && text(x.commitId) && ['success','failure'].includes(String(x.status)))))) return false;
   return true;
 }
 function parseJson(raw: string): unknown {

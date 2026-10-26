@@ -67,12 +67,20 @@ export function advancedCommand(state: GitState, command: string, args: string[]
     if (!bisect) return fail('先にgit bisect startを実行してください。');
     if (args[0] === 'reset') {
       if (!cleanTrackedFiles(state)) return fail('変更を保存してからbisect resetしてください。');
+      const originalHead = bisect.original.HEAD;
+      const targetId = originalHead.type === 'branch' ? state.branches[originalHead.value] : originalHead.value;
+      const targetTree = targetId === '' && originalHead.type === 'branch' ? {} : state.commits[targetId]?.tree;
+      if (!targetTree) return fail('bisect開始時の参照がありません。戻り先のブランチを復元してから再試行してください。');
       const untracked = untrackedFiles(state);
-      if (Object.keys(untracked).some(path => headTree(bisect.original)[path] !== undefined)) return fail('Untracked files would be overwritten.');
+      if (Object.keys(untracked).some(path => targetTree[path] !== undefined)) return fail('Untracked files would be overwritten.');
       const found = bisect.found;
-      Object.assign(state, cloneGitData(bisect.original), { lastBisectFound: found });
+      // Reset checkout position, not the repository's commits, refs, stash or configuration.
+      state.HEAD = { ...originalHead };
+      state.detachedHead = originalHead.type === 'commit';
+      state.index = dictionary();
+      state.lastBisectFound = found;
       delete state.bisect;
-      state.workingDirectory = { ...sparseTree(state, headTree(state)), ...untracked };
+      state.workingDirectory = { ...sparseTree(state, targetTree), ...untracked };
       return success('bisect前の作業場所に戻りました。');
     }
     if (!['good', 'bad'].includes(args[0])) return fail('bisect start/good/bad/reset に対応しています。');

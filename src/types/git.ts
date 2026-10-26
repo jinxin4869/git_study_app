@@ -41,6 +41,7 @@ export interface GitState {
     kind: 'rebase' | 'cherry-pick' | 'revert';
     original: GitState;
     remaining: string[];
+    recordOrigin?: boolean;
     current?: { id: string; message: string; committed?: boolean; amend?: boolean };
     todo?: string;
     awaiting?: 'todo' | 'edit' | 'reword';
@@ -56,6 +57,7 @@ export interface GitState {
     pullRequests: Record<number, {
       number: number; title: string; body: string; base: string; head: string;
       headCommit: string; status: 'open' | 'merged' | 'closed';
+      draft?: boolean;
       review?: { commitId: string; result: 'approved' | 'changes_requested'; body: string };
       checks?: { commitId: string; status: 'success' | 'failure' };
     }>;

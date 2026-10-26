@@ -1,5 +1,6 @@
 import { GitState, CommandResult, Commit, FileChange } from '@/types/git';
 import { generateDiff } from '@/utils/diff-utils';
+import { cleanPreview } from './clean-preview';
 import { headTree, indexTree, sameTree, cleanTrackedFiles, inSparseScope, sparseTree, untrackedFiles, dictionary, cloneGitData, normalizeGitData } from './git-state';
 import { githubCommand } from './github-simulator';
 import { copyHistory, isAncestor, resolveRevision } from './revisions';
@@ -10,6 +11,7 @@ import { mergeContent } from './merge-content';
 import { fileStates } from './file-states';
 import { tokenizeCommand, validateCommandOptions, commandHelp } from './command-input';
 import { isUnmerged, hasUnmergedPaths, clearUnmergedPaths } from './conflicts';
+import { newCommitId, uniqueSimulationId } from './simulation-ids';
 
 export interface ConflictResolutionSession {
   path: string;
@@ -214,6 +216,8 @@ export class GitEngine {
         return this.commit(args);
       case 'status':
         return this.status(args);
+      case 'clean':
+        return cleanPreview(this.state, args);
       case 'blame':
         return this.blame(args);
       case 'log':
@@ -358,7 +362,7 @@ export class GitEngine {
       const changed = !sameTree(head, effectiveIndex) || !sameTree(head, saved);
       if (!changed) return { success: false, message: 'No local changes to save.' };
       message ??= action === 'save' ? targets.join(' ') : `WIP on ${this.state.HEAD.value}`;
-      this.state.stash.push({ id: Math.random().toString(36).slice(2, 9), message: message || 'WIP', baseTree: { ...head }, index: cloneGitData(this.state.index), workingDirectory: saved, timestamp: Date.now() });
+      this.state.stash.push({ id: uniqueSimulationId(this.state.stash.map(item => item.id)), message: message || 'WIP', baseTree: { ...head }, index: cloneGitData(this.state.index), workingDirectory: saved, timestamp: Date.now() });
       const preserved = Object.fromEntries(Object.entries(this.state.workingDirectory).filter(([path]) => !shouldSave(path)));
       this.state.index = dictionary();
       this.state.workingDirectory = { ...head, ...preserved };
@@ -609,7 +613,7 @@ export class GitEngine {
       this.state.index = newIndex;
       const commitMsg = `Merge branch '${targetBranchName}' into ${this.state.HEAD.type === 'branch' ? this.state.HEAD.value : 'HEAD'}`;
       
-      const commitId = Math.random().toString(36).substring(2, 9);
+      const commitId = newCommitId(this.state);
       const newCommit: Commit = {
         id: commitId,
         message: commitMsg,
@@ -743,7 +747,7 @@ export class GitEngine {
       return { success: false, message: 'Resolve and stage all merge changes first.' };
     }
     if (!amend && !this.state.pendingMerge && sameTree(newTree, headTree(this.state))) return { success: false, message: 'nothing to commit' };
-    const commitId = Math.random().toString(36).substring(2, 9);
+    const commitId = newCommitId(this.state);
     this.state.commits[commitId] = {
       id: commitId, message,
       parents: this.state.pendingMerge && parentId ? [parentId, this.state.pendingMerge.targetId] : amend ? previous!.parents : parentId ? [parentId] : [],
@@ -1302,7 +1306,8 @@ export class GitEngine {
     if (pending || this.state.pendingMerge || hasUnmergedPaths(this.state)) return { success: false, message: 'Complete or abort the current operation first.' };
     if (!cleanTrackedFiles(this.state)) return { success: false, message: 'Commit or stash local changes first.' };
     const interactive = kind === 'rebase' && (args.includes('-i') || args.includes('--interactive'));
-    const targets = args.filter(arg => !['-i', '--interactive'].includes(arg));
+    const recordOrigin = kind === 'cherry-pick' && args.includes('-x');
+    const targets = args.filter(arg => !['-i', '--interactive', ...(kind === 'cherry-pick' ? ['-x'] : [])].includes(arg));
     if (!targets.length || targets.some(arg => arg.startsWith('-'))) return { success: false, message: `${kind}: specify a commit or branch; supported controls: --continue/--abort/--skip` };
     const original = this.getState();
     const currentId = this.resolveHeadCommitId();
@@ -1333,7 +1338,7 @@ export class GitEngine {
       remaining = resolved as string[];
       if (remaining.some(id => this.state.commits[id].parents.length > 1)) return { success: false, message: 'Merge commits require a mainline choice; select a single-parent commit in this simulator.' };
     }
-    this.state.operation = { kind, original, remaining };
+    this.state.operation = { kind, original, remaining, ...(recordOrigin ? { recordOrigin: true } : {}) };
     if (interactive) {
       this.state.operation.awaiting = 'todo';
       this.state.operation.todo = remaining.map(id => `pick ${id} ${this.state.commits[id].message}`).join('\n');
@@ -1354,7 +1359,8 @@ export class GitEngine {
       const result = operation.kind === 'revert' ? this.performThreeWayMerge(source, ours, parent) : this.performThreeWayMerge(parent, ours, source);
       if (Object.keys(untracked).some(path => result.tree[path] !== undefined)) return { success: false, message: 'Untracked files would be overwritten.' };
       const amend = action === 'squash' || action === 'fixup';
-      const message = operation.kind === 'revert' ? `Revert "${source.message}"` : action === 'fixup' ? ours.message : action === 'squash' ? `${ours.message}\n\n${source.message}` : source.message;
+      const originNote = operation.kind === 'cherry-pick' && operation.recordOrigin ? `\n\n(cherry picked from commit ${source.id})` : '';
+      const message = operation.kind === 'revert' ? `Revert "${source.message}"` : action === 'fixup' ? ours.message : action === 'squash' ? `${ours.message}\n\n${source.message}` : source.message + originNote;
       this.state.workingDirectory = { ...result.tree, ...untracked };
       if (result.conflictedPaths.length) this.state.unmergedPaths = result.conflictedPaths;
       else clearUnmergedPaths(this.state);

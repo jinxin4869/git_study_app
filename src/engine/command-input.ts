@@ -33,6 +33,7 @@ export function tokenizeCommand(command: string): { tokens: CommandToken[]; erro
 /** Flags actually read by the simulator. Status/commit/switch/rm retain their detailed validators. */
 const options: Record<string, { flags: string[]; values?: string[]; assignments?: string[] }> = {
   init: { flags: [] }, clone: { flags: [] }, add: { flags: ['-A', '-f', '-p', '--patch'] },
+  clean: { flags: ['-n', '--dry-run', '-d', '-nd', '-dn'] },
   log: { flags: ['--oneline', '--graph', '--all'], values: ['--grep'] },
   diff: { flags: ['--cached', '--staged', '--name-only'] }, show: { flags: [] }, reflog: { flags: [] }, blame: { flags: [] },
   branch: { flags: ['-a', '-m', '-d', '-D'] }, checkout: { flags: ['-b', '--detach'] },
@@ -41,12 +42,13 @@ const options: Record<string, { flags: string[]; values?: string[]; assignments?
   push: { flags: ['-u', '--set-upstream', '--force', '--force-with-lease', '--tags', '--delete'] },
   pull: { flags: ['--rebase', '--ff-only'] }, merge: { flags: ['--abort', '--no-ff', '--ff-only'] },
   rebase: { flags: ['-i', '--interactive', '--continue', '--abort', '--skip'] },
-  'cherry-pick': { flags: ['--continue', '--abort', '--skip'] }, revert: { flags: ['--continue', '--abort', '--skip'] },
+  'cherry-pick': { flags: ['-x', '--continue', '--abort', '--skip'] }, revert: { flags: ['--continue', '--abort', '--skip'] },
   restore: { flags: ['--staged', '-S', '--worktree', '-W'], values: ['-s', '--source'], assignments: ['--source='] }, mv: { flags: [] },
   config: { flags: ['--local', '--global', '--list'] }, tag: { flags: ['-a', '-d'], values: ['-m'] },
   worktree: { flags: [], values: ['-b'] }, bisect: { flags: [] }, 'sparse-checkout': { flags: ['--cone'] },
   submodule: { flags: ['--init', '--remote'] }, lfs: { flags: [] },
-  'gh pr create': { flags: [], values: ['--title', '--body', '--base', '--head'] },
+  'gh pr create': { flags: ['--draft'], values: ['--title', '--body', '--base', '--head'] },
+  'gh pr ready': { flags: ['--undo'] },
   'gh pr view': { flags: [] }, 'gh pr checks': { flags: [] }, 'gh pr close': { flags: [] }, 'gh pr merge': { flags: ['--merge'] },
   'simulate ci pass': { flags: [] }, 'simulate ci fail': { flags: [] },
   'simulate review approve': { flags: [], values: ['--body'] }, 'simulate review request-changes': { flags: [], values: ['--body'] },
@@ -81,11 +83,13 @@ const specialHelp: Record<string, string> = {
   rm: 'git rm [-f] [--cached] [--] <file> — 追跡ファイルの削除・追跡解除',
 };
 const syntaxHelp: Record<string, string> = {
+  clean: '-n [-d] / --dry-run [-d]（確認のみ。実削除・パス指定には未対応）',
   add: '<file...> / . / -A / -p [file]', branch: '[name [start]] / -a / -m [old] new / -d|-D name',
   stash: '[push [-u] [-m "説明"]] / list / show|drop|apply|pop [stash@{番号}]',
   remote: '[-v] / add name URL / remove name', fetch: '[remote] [branch] [--prune]',
   pull: '[--rebase|--ff-only] [remote] [branch]', push: '[remote] [branch] [-u] [--tags|--delete|--force-with-lease]',
   rebase: '[-i] <upstream> / --continue / --skip / --abort',
+  'cherry-pick': '[-x] <commit...> / --continue / --skip / --abort',
   worktree: 'list / add [-b branch] path [start] / remove path',
   bisect: 'start / good [commit] / bad [commit] / reset',
   'sparse-checkout': 'init [--cone] / set directory... / list / disable',
@@ -93,7 +97,7 @@ const syntaxHelp: Record<string, string> = {
 };
 export const supportedCommands = [...Object.keys(options).filter(name => !name.includes(' ')), ...Object.keys(specialHelp)].sort();
 export function commandHelp(command?: string): string | null {
-  if (!command) return `このアプリの対応コマンド: ${supportedCommands.join('、')}\n詳しくは git help <command> または git <command> --help。\n模擬GitHub: gh pr create/view/checks/merge/close（--mergeのみ）。simulate review approve|request-changes / simulate ci pass|fail。\nファイル操作: touch <file>、echo "内容" > <file>、rm <file>、ls。cd <仮想worktree>、clear。\n任意のシェル・実GitHub・実ネットワークは実行しません。`;
+  if (!command) return `このアプリの対応コマンド: ${supportedCommands.join('、')}\n詳しくは git help <command> または git <command> --help。\n模擬GitHub: gh pr create [--draft] / view / checks / ready [--undo] / merge（--mergeのみ）/ close。simulate review approve|request-changes / simulate ci pass|fail。\nファイル操作: touch <file>、echo "内容" > <file>、rm <file>、ls。cd <仮想worktree>、clear。\n任意のシェル・実GitHub・実ネットワークは実行しません。`;
   if (Object.hasOwn(specialHelp, command)) return specialHelp[command];
   if (!Object.hasOwn(options, command) || command.includes(' ')) return null;
   const spec = options[command];
