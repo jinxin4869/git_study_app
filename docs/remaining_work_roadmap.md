@@ -1,46 +1,29 @@
-# 残作業と拡張候補の検討（2026-10-03 JST）
-
-現行状況は以下の最新節と[軽量改善の対応と残件](lightweight_improvements.md)を参照。以下の調査と過去PR作業時点の分類は履歴として保持する。
-
-## 追加対応：PRの統合先変更（2026-10-26 JST）
-
-**G04：一部完了（Draft・base変更・変更後の再確認まで完了）**。新しい統合先へ変更し、レビューとCIを取得し直す課題を追加。[対応構文・保存・拒否条件](mock_pr_base_change.md)。コメントスレッド・CODEOWNERS・保護ルール等は残る。
-
-## 追加対応：難易度の整理（2026-10-26 JST）
-
-**L06：一部完了（探索・難易度再分類は完了、所要時間の実測は未実施）**。追加課題の一律上級を見直し、判断量に基づく分類と未計測の目安を明示。[編集基準と範囲](lesson_difficulty.md)。既存の課題・採点・保存IDは維持する。
-
-## 追加対応：ヒントなし総合課題（2026-10-26 JST）
-
-**L10：完了（2課題の範囲）**。公開対象の選別と、共有履歴を保った修正・手元作業の保護を、ヒントなしで判断する課題を追加。達成後に解答例を表示。[対応範囲](independent_capstones.md)。以前のL10「未着手」はこの更新で置き換える。
-
-## 追加対応：復旧の限界（2026-10-26 JST）
-
-**G09：完了（比較教材・3問・既存救出課題・clean dry-runの範囲）**。[復旧の限界](recovery_boundaries.md)を追加し、記録済みコミットと未記録編集、削除候補とバックアップを区別する。cleanの実削除、データの永久保存、任意の復旧の保証は対応範囲外。以前の「復旧限界の教材が未実装」はこの更新で置き換える。L08は[PR#31](https://github.com/jinxin4869/git_study_app/pull/31)を参照。
-
-## 追加対応：誤操作の診断（2026-10-26 JST）
-
-**L08：完了（3課題の範囲）**。古いindex・誤った作業ブランチ・古いPR承認/CIから始め、原因を確認して直す3課題を追加。[対応範囲と完了条件](mistake_recovery_lessons.md)を参照。以前のL08「未着手」はこの更新で置き換える。任意の誤操作の網羅を完了条件にはしない。
+# 残作業と拡張候補の検討
 
 ## 完了状況の更新（2026-10-26 JST）
 
-確認対象はmain `61756dc`。PR#16〜#29はすべてマージ済み。完了した対応は削除せず、完了日・関連PR・対応範囲を[完了した対応の記録](lightweight_improvements.md)へ残し、通常の残作業一覧から外す。日付はマージ日のJST。「一部完了」は実装済み範囲と残件を別に記載する。
+この更新をmainへ取り込んだ状態の対応範囲です。PR#16〜#35の完了日・関連PR・残件は[軽量改善の対応と残件](lightweight_improvements.md)で追跡します。完了した項目は削除せず記録を残し、通常の残作業一覧から外します。完了日はマージ日のJSTです。
 
-| 対象 | 現在のステータス | 完了した範囲 / 関連PR | 完了日・最新反映日（JST） |
+| 対象 | ステータス | 完了した範囲・関連PR | 完了日・最新反映日（JST） |
 | --- | --- | --- | --- |
-| P03/P05、L09/L11、U01/U03/U05/U11、G01/G14、E01 | 完了（記載範囲） | 明示checkpoint・持ち出し、理解確認・比較表、3領域比較・競合編集・remote表示・演習URL、行単位merge・実Gitラボ・対応help。[#16](https://github.com/jinxin4869/git_study_app/pull/16)の[実装範囲](batch_improvements.md) | 2026-10-25 |
+| P03/P05、L09/L11、U01/U03/U05/U11、G01/G14、E01 | 完了（記載範囲） | 明示checkpoint・持ち出し、理解確認・比較表、3領域比較・競合編集・remote表示・演習URL、行単位merge・実Gitラボ・help。[#16](https://github.com/jinxin4869/git_study_app/pull/16)の[実装範囲](batch_improvements.md) | 2026-10-25 |
 | U02 | 完了 | 通常ファイルの作成・複数行編集・削除。[#20](https://github.com/jinxin4869/git_study_app/pull/20) | 2026-10-25 |
 | U06 | 完了（記載範囲） | ズーム・全体/HEAD表示・コミット詳細。[#19](https://github.com/jinxin4869/git_study_app/pull/19) | 2026-10-25 |
 | U07 | 完了（記載範囲） | help・補完・履歴検索・出力コピー。[#16](https://github.com/jinxin4869/git_study_app/pull/16)・[#17](https://github.com/jinxin4869/git_study_app/pull/17)・[#18](https://github.com/jinxin4869/git_study_app/pull/18) | 2026-10-25 |
+| D01 | 完了（今回の現行化範囲） | 冒頭の最新ステータス、完了日・関連PR・残件。[#30](https://github.com/jinxin4869/git_study_app/pull/30)と今回の更新。今後の変更時も維持する | 2026-10-26 |
 | D04 | 完了（記載範囲） | 貢献手順・報告フォーム・PRテンプレート・非公開情報の報告方針。[#26](https://github.com/jinxin4869/git_study_app/pull/26) | 2026-10-26 |
-| L06 | 一部完了 | 探索・所要時間の目安は[#16](https://github.com/jinxin4869/git_study_app/pull/16)。難易度再分類も完了。所要時間の実測は残る | 2026-10-25 |
-| G04/G08 | 一部完了 | Draft・移植元記録は[#25](https://github.com/jinxin4869/git_study_app/pull/25)・[#24](https://github.com/jinxin4869/git_study_app/pull/24)。各テーマの追加教材・操作は残る | 2026-10-26 |
+| L08 | 完了（3課題の範囲） | 古いindex・誤った作業先・旧版へのPR承認/CIを診断して直す。[#31](https://github.com/jinxin4869/git_study_app/pull/31)、[課題と完了条件](mistake_recovery_lessons.md) | 2026-10-26 |
+| G09 | 完了（比較教材・既存救出・dry-runの範囲） | 記録済みコミットと未記録編集、削除候補とバックアップの比較・3問。[#32](https://github.com/jinxin4869/git_study_app/pull/32)、[復旧の限界](recovery_boundaries.md)。実削除や永久復旧の保証は範囲外 | 2026-10-26 |
+| L10 | 完了（2課題の範囲） | 公開対象の選別、共有履歴と未公開作業の保護をヒントなしで判断。[#33](https://github.com/jinxin4869/git_study_app/pull/33)、[総合課題](independent_capstones.md) | 2026-10-26 |
+| L06 | 一部完了 | 探索と49課題の難易度再分類は完了。[#16](https://github.com/jinxin4869/git_study_app/pull/16)・[#34](https://github.com/jinxin4869/git_study_app/pull/34)。[未計測の目安](lesson_difficulty.md)と所要時間の実測を区別し、実測は未実施 | 2026-10-26 |
+| G04 | 一部完了 | Draft・base変更・再確認と保存再開は完了。[#25](https://github.com/jinxin4869/git_study_app/pull/25)・[#35](https://github.com/jinxin4869/git_study_app/pull/35)。[対応範囲](mock_pr_base_change.md)。スレッド・CODEOWNERS・保護ルール等は残る | 2026-10-26 |
+| G08 | 一部完了 | cherry-pick -xは[#24](https://github.com/jinxin4869/git_study_app/pull/24)。範囲移植・range-diff等は残る | 2026-10-26 |
 | E05 | 一部完了 | ID衝突防止は[#28](https://github.com/jinxin4869/git_study_app/pull/28)。時刻/ID生成器全体の注入等は残る | 2026-10-26 |
-| E06/T09 | 一部完了 | 計測・基本/高度な固定seed列・全139教材・保存境界は[#21](https://github.com/jinxin4869/git_study_app/pull/21)・[#22](https://github.com/jinxin4869/git_study_app/pull/22)。未検証経路は必要性を評価して追加 | 2026-10-26 |
+| E06/T09 | 一部完了 | 計測・基本/高度な固定seed列・全公開教材・保存境界は[#21](https://github.com/jinxin4869/git_study_app/pull/21)・[#22](https://github.com/jinxin4869/git_study_app/pull/22)。未検証経路は必要性を評価して追加 | 2026-10-26 |
 | O01/O02 | 一部完了 | Node上の合成履歴計測は[#23](https://github.com/jinxin4869/git_study_app/pull/23)。ブラウザ描画・長時間・端末差の実測は残る | 2026-10-26 |
 | D06 | 一部完了 | 依存/フォント/画像の棚卸しは[#27](https://github.com/jinxin4869/git_study_app/pull/27)。9種の本文とnative再配布時の条件は未確認 | 2026-10-26 |
 
-今回更新していない過去の対応済み項目の分類は引き継ぐ。全98候補の再集計ではなく、完了した追加対応から反映したもの。**以前の「後回し38件」「未マージ」等を現在の残件数や状態として使わない**。[一部完了の残件](lightweight_improvements.md)と[未着手・保留／対象外](lightweight_improvements.md)を分けて確認する。
+今回更新していない過去の対応済み項目の分類は引き継ぎます。全98候補の再集計ではありません。**以前の「後回し38件」「未マージ」等を現在の残件数や状態として使わない**。残件は[一部完了・未着手・保留／対象外の一覧](lightweight_improvements.md)で確認してください。実機確認は利用者の指示で対象外です。
 
 ## 過去の調査と対応履歴
 
