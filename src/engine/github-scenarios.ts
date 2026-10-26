@@ -41,3 +41,14 @@ export const githubScenarios: Scenario[] = [
       'simulate review approve 1', 'simulate ci pass 1', 'gh pr merge 1 --merge'
     ])
 ];
+
+// Start with an approved PR targeting the wrong release line.
+const retarget = exercise('github-retarget', 'PRの統合先を変更して再確認', 'PR #1をmainからreleaseへ変更してください。統合先が変わるため、この模擬環境では承認とCIを改めて取得してreleaseへマージします。releaseのRELEASE.mdは残し、mainは変更しません。', true,
+  { type: 'github_state', params: { status: 'merged', baseBranch: 'release', review: 'approved', checks: 'success', tree: { 'app.ts': 'version 2', 'RELEASE.md': 'Keep release notes' } } },
+  ['gh pr view 1', 'gh pr edit 1 --base release', 'simulate review approve 1', 'simulate ci pass 1', 'gh pr merge 1 --merge']);
+const retargetState = retarget.initialState!;
+retargetState.mockServers.origin.commits.c3 = { ...c1, id: 'c3', message: 'Release notes', parents: ['c1'], tree: { ...c1.tree, 'RELEASE.md': 'Keep release notes' } };
+retargetState.mockServers.origin.branches.release = 'c3';
+retargetState.github!.pullRequests[1].review = { commitId: 'c2', result: 'approved', body: '旧統合先を確認' };
+retargetState.github!.pullRequests[1].checks = { commitId: 'c2', status: 'success' };
+githubScenarios.push(retarget);

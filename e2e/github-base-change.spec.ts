@@ -1,0 +1,20 @@
+import { test, expect } from '@playwright/test';
+test('changing base removes old confirmations and survives checkpoint before merging', async ({ page }) => {
+  await page.goto('/game?lesson=github-retarget');
+  const input = page.getByRole('textbox', { name: '演習コマンド' });
+  const run = async (command: string) => { await input.fill(command); await input.press('Enter'); };
+  await input.fill('gh pr ed'); await input.press('Tab'); await expect(input).toHaveValue('gh pr edit ');
+  await run('gh pr edit 1 --base release');
+  await run('gh pr merge 1 --merge');
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toHaveCount(0);
+  await page.getByText('途中状態・バックアップ', { exact: true }).click();
+  await page.getByRole('button', { name: '現在の途中状態を保存', exact: true }).click();
+  await page.reload();
+  await page.getByText('途中状態・バックアップ', { exact: true }).click();
+  await page.getByRole('button', { name: '保存した途中状態を再開', exact: true }).click();
+  await run('gh pr view 1');
+  const output = page.getByRole('region', { name: '端末出力' });
+  await expect(output).toContainText('feature/login → release');
+  for (const command of ['simulate review approve 1', 'simulate ci pass 1', 'gh pr merge 1 --merge']) await run(command);
+  await expect(page.getByText('演習を達成しました！', { exact: true })).toBeVisible();
+});

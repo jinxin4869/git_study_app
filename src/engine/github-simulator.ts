@@ -10,14 +10,14 @@ export function githubCommand(state: GitState, args: string[], simulated: boolea
   const fail = (message: string): CommandResult => ({ success: false, message });
   if (!github || !server) return fail('GitHub模擬演習を選択してください。実際のGitHubには接続しません。');
   const success = (message: string): CommandResult => ({ success: true, message, newState: cloneGitData(state) });
-  if (!simulated && args[0] !== 'pr') return fail('対応コマンド: gh pr create/view/checks/ready/merge/close');
+  if (!simulated && args[0] !== 'pr') return fail('対応コマンド: gh pr create/view/checks/ready/edit/merge/close');
   const action = simulated ? args[0] : args[1];
   const values = new Map<string, string>();
   const targets: string[] = [];
   let merge = false;
   let draft = false;
   let undoReady = false;
-  const allowed = !simulated && action === 'create' ? ['--title', '--body', '--base', '--head'] : simulated && action === 'review' ? ['--body'] : [];
+  const allowed = !simulated && action === 'create' ? ['--title', '--body', '--base', '--head'] : !simulated && action === 'edit' ? ['--base'] : simulated && action === 'review' ? ['--body'] : [];
   for (let i = 2; i < args.length; i++) {
     const token = args[i];
     if (allowed.includes(token)) {
@@ -65,6 +65,19 @@ export function githubCommand(state: GitState, args: string[], simulated: boolea
   if (action === 'view') return success(`#${pr.number} ${pr.title}\n${pr.body}\n${pr.head} → ${pr.base}\n状態: ${pr.status}${pr.draft ? ' (Draft・下書き)' : ''}\nレビュー: ${pr.review?.commitId === latest ? pr.review.result : '承認待ち'}\nCI: ${pr.checks?.commitId === latest ? pr.checks.status : '実行待ち'}`);
   if (action === 'checks') return success(`CI: ${pr.checks?.commitId === latest ? pr.checks.status : 'pending'} (${latest})`);
   if (pr.status !== 'open') return fail('PRは開いていません。');
+  if (action === 'edit') {
+    const base = option('--base');
+    if (!base) return fail('この模擬環境の変更は gh pr edit [番号] --base <branch> に対応します。');
+    if (!Object.hasOwn(server.branches, base) || !Object.hasOwn(server.commits, server.branches[base])) return fail('変更先のブランチを先にpushしてください。');
+    if (base === pr.base) return fail('PRは既にその統合先です。');
+    if (base === pr.head || server.branches[base] === latest) return fail('差分のある別の統合先を指定してください。');
+    if (Object.values(github.pullRequests).some(other => other.number !== number && other.status === 'open' && other.head === pr.head && other.base === base)) return fail('その提案元と統合先のPRは既に作成済みです。');
+    pr.base = base;
+    // Review/CI in this simulator are deliberately renewed when integration context changes.
+    delete pr.review;
+    delete pr.checks;
+    return success(`PR #${number} の統合先を${base}へ変更しました。新しい統合先を確認し、レビューとCIを再実行してください。`);
+  }
   if (action === 'ready') {
     if (!!pr.draft === undoReady) return fail(undoReady ? 'PRは既にDraftです。' : 'PRは既にレビュー準備完了です。');
     pr.draft = undoReady;
@@ -74,7 +87,7 @@ export function githubCommand(state: GitState, args: string[], simulated: boolea
     pr.status = 'closed';
     return success(`PR #${number} を閉じました。`);
   }
-  if (action !== 'merge') return fail('対応コマンド: gh pr create/view/checks/ready/merge/close');
+  if (action !== 'merge') return fail('対応コマンド: gh pr create/view/checks/ready/edit/merge/close');
   if (!merge) return fail('この演習では gh pr merge [番号] --merge を使います。');
   if (pr.draft) return fail('Draft PRはマージできません。gh pr ready [番号]でレビュー準備完了にしてください。');
   if (github.requireReview && (pr.review?.commitId !== latest || pr.review.result !== 'approved')) return fail('最新コミットへの承認が必要です。');

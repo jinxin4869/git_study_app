@@ -2,6 +2,7 @@
 export interface LessonNote { concept: string; verify: string; caution: string }
 const note = (concept: string, verify: string, caution: string): LessonNote => ({ concept, verify, caution });
 export const lessonNotes: Record<string, LessonNote> = {
+  'github-retarget': note('PRの提案元を変えずに統合先を変更し、新しい統合先に必要な確認をやり直します。', '統合先releaseのversion 2とKeep release notes、最新の承認とCIを確認します。mainには取り込みません。', 'この模擬環境では統合先変更時に承認とCIを解除します。実GitHubのレビュー失効やrequired checksは設定・差分にも依存します。'),
   'capstone-selective-delivery': note('公開する修正と手元に残す編集を分け、必要なファイルだけを新しい作業先で記録します。', 'deliveryとorigin/deliveryのReady、公開文書とKeep、手元のDraft docsとPrivate memoを確認します。', '作業ツリーと公開コミットの差を読みます。まとめてstageすると非公開の下書きも記録されるため対象を選びます。'),
   'capstone-shared-recovery': note('共有済みの変更を逆向きの記録で取り消し、手元のメモを公開履歴から分離して保持します。', 'Bugの後の取り消し履歴、共有先のBaseとKeep、手元のPrivate memoと空のstashを確認します。', '手元を以前の版に戻すだけでは共有先を修正できません。履歴を残すことと未公開内容の保持を両方確認します。'),
   'mistake-stale-index': note('記録予定の版と手元の最新版が違います。三つの領域を読み、必要な内容を選び直します。', 'HEADのapp.tsがFixed、notes.mdがKeepで追跡ファイルに差が残らないことを確認します。', 'コミットは最後にstageした内容を使います。手元の編集を読み、試行のDraftを記録しないよう確認します。'),
