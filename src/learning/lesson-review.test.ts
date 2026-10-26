@@ -8,7 +8,7 @@ import { lessonHints } from './hints';
 
 const lesson = (id: string) => scenarios.find(item => item.id === id)!;
 describe('reviewed learning material', () => {
-  it('has authored notes and a reachable learning order for all 139 existing exercises', () => {
+  it('has authored notes and a reachable learning order for every published exercise', () => {
     expect(Object.keys(lessonNotes).sort()).toEqual(scenarios.map(item => item.id).sort());
     expect(learningPath.map(item => item.id).sort()).toEqual(scenarios.map(item => item.id).sort());
     for (const scenario of scenarios) {
@@ -26,7 +26,7 @@ describe('reviewed learning material', () => {
   it('suggests the next unfinished exercise and wraps for review without requiring prior completion', () => {
     expect(recommendedNext('level-1-1', new Set())?.id).toBe('level-1-2');
     expect(recommendedNext('level-1-1', new Set(['level-1-2']))?.id).toBe('level-1-3');
-    expect(recommendedNext('workflow-release', new Set())?.id).toBe('level-1-1');
+    expect(recommendedNext('mistake-stale-approval', new Set())?.id).toBe('level-1-1');
     expect(recommendedNext('level-1-1', new Set(scenarios.map(item => item.id)))).toBeNull();
     expect(recommendedNext('invalid', new Set())).toBeNull();
   });

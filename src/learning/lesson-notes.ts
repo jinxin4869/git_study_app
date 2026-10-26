@@ -2,6 +2,9 @@
 export interface LessonNote { concept: string; verify: string; caution: string }
 const note = (concept: string, verify: string, caution: string): LessonNote => ({ concept, verify, caution });
 export const lessonNotes: Record<string, LessonNote> = {
+  'mistake-stale-index': note('記録予定の版と手元の最新版が違います。三つの領域を読み、必要な内容を選び直します。', 'HEADのapp.tsがFixed、notes.mdがKeepで追跡ファイルに差が残らないことを確認します。', 'コミットは最後にstageした内容を使います。手元の編集を読み、試行のDraftを記録しないよう確認します。'),
+  'mistake-wrong-branch': note('作業先を間違えても、必要なコミットを正しいブランチで保護してから元の参照を戻せます。', 'featureがc2、mainがc1で、作業場所がfeatureのFixedになったことを確認します。', '共有前のローカル課題です。共有済みのmainを同じように巻き戻してよいという意味ではありません。'),
+  'mistake-stale-approval': note('承認と確認の対象が最新版かを見ます。古い版の成功だけでは修正した内容の確認になりません。', '最新版への承認とCI成功、統合先のReviewed fixとKeepを確認します。', 'この模擬環境は最新コミットへの再確認を要求します。実GitHubの動作は保護設定にも依存します。'),
   'operation-rebase-continue': note('載せ替えが競合で停止したら、app.tsの結果をResolvedに決めてから次へ進めます。', '解消内容をstageし、featureの親がc2で進行中の操作がなくなることを確認します。', 'ファイルを書き換えるだけでは続行できません。実Gitのrebase中はours/theirsの意味も確認します。'),
   'operation-rebase-abort': note('載せ替えを取りやめ、開始前のfeatureと作業内容へ戻します。', 'rebaseを中断する操作を成功させ、HEADがc3、app.tsがfeature versionへ戻ることを確認します。', 'abortとskipは別です。skipは現在の変更を外して後の変更へ進みます。'),
   'operation-pick-continue': note('移植する変更とmainの編集が競合しています。app.tsをResolvedに決めて移植を終えます。', 'stage後に続行し、Featureの記録と親c2、操作の終了を確認します。', 'cherry-pickの続行にはcherry-pickの操作を使います。別の履歴操作の続行とは交換できません。'),

@@ -4,9 +4,9 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Git学習アプリ | ブラウザで操作して学ぶ",
-  description: "139の演習とブラウザ内の模擬Gitで、履歴・ブランチ・競合の復旧を学習。進捗保存と段階ヒントで続けて学べます。",
+  description: "142の演習とブラウザ内の模擬Gitで、履歴・ブランチ・競合の復旧を学習。進捗保存と段階ヒントで続けて学べます。",
   metadataBase: new URL("https://git-study-app.vercel.app"),
-  openGraph: { title: "Git学習アプリ", description: "ブラウザ内の模擬Gitで操作と復旧を学ぶ139演習", url: "https://git-study-app.vercel.app", locale: "ja_JP", type: "website" },
+  openGraph: { title: "Git学習アプリ", description: "ブラウザ内の模擬Gitで操作と復旧を学ぶ142演習", url: "https://git-study-app.vercel.app", locale: "ja_JP", type: "website" },
 };
 
 export default function RootLayout({
