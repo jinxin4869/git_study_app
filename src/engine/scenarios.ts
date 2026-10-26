@@ -1,3 +1,4 @@
+import { difficultyOverrides } from '@/learning/lesson-difficulty';
 import { capstoneScenarios } from './capstone-scenarios';
 import { mistakeScenarios } from './mistake-scenarios';
 import { Scenario } from '@/types/git';
@@ -16,7 +17,7 @@ const resolvedWorld = '<html>\n<body>\n<h1>Hello World</h1>\n</body>\n</html>';
 const resolvedGit = '<html>\n<body>\n<h1>Hello Git</h1>\n</body>\n</html>';
 const resolvedBoth = '<html>\n<body>\n<h1>Hello World</h1>\n<h1>Hello Git</h1>\n</body>\n</html>';
 
-export const scenarios: Scenario[] = [
+const legacyScenarios: Scenario[] = [
   {
     id: 'level-1-1',
     title: 'Level 1-1: リポジトリの作成',
@@ -1089,17 +1090,10 @@ export const scenarios: Scenario[] = [
   }
 ];
 
-for (const scenario of scenarios) scenario.solution = legacySolutions[scenario.id];
-scenarios.push(...practicalScenarios);
-scenarios.push(...githubScenarios);
-scenarios.push(...remoteScenarios);
-scenarios.push(...historyScenarios);
-scenarios.push(...operationScenarios);
-scenarios.push(...interactiveScenarios);
-scenarios.push(...advancedScenarios);
-scenarios.push(...precisionScenarios);
-scenarios.push(...workflowScenarios);
-
-scenarios.push(...mistakeScenarios);
-
-scenarios.push(...capstoneScenarios);
+for (const scenario of legacyScenarios) scenario.solution = legacySolutions[scenario.id];
+// Apply reviewed display metadata without mutating the authored scenario definitions.
+export const scenarios: Scenario[] = [
+  ...legacyScenarios, ...practicalScenarios, ...githubScenarios, ...remoteScenarios,
+  ...historyScenarios, ...operationScenarios, ...interactiveScenarios, ...advancedScenarios,
+  ...precisionScenarios, ...workflowScenarios, ...mistakeScenarios, ...capstoneScenarios,
+].map(scenario => ({ ...scenario, difficulty: difficultyOverrides[scenario.id] ?? scenario.difficulty }));

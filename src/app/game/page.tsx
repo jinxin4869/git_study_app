@@ -499,6 +499,7 @@ function LearningSession() {
             <label htmlFor="exercise-search" className="block mb-1 text-sm text-gray-300">演習を検索</label>
             <input id="exercise-search" type="search" value={search} maxLength={512} onChange={event => { setSearch(event.target.value); saveSelection(currentScenario?.id ?? null, category, event.target.value); }} placeholder="操作やコマンド名" className="w-full min-h-11 bg-gray-950 text-gray-100 placeholder:text-gray-400 border border-gray-700 rounded px-3 focus-visible:outline-2 focus-visible:outline-blue-400" />
           </div>
+          <p className="text-xs text-gray-400">難易度は操作の判断量に基づく編集上の分類です。所要時間は未計測の目安です。</p>
           <label className="block text-sm">難易度<select aria-label="難易度" value={difficulty} onChange={event => setDifficulty(event.target.value)} className="block w-full min-h-11 bg-gray-950 border border-gray-700 rounded"><option value="all">すべて</option><option value="beginner">初級</option><option value="intermediate">中級</option><option value="advanced">上級</option></select></label>
           <label className="block text-sm">完了状態<select aria-label="完了状態" value={completionFilter} onChange={event => setCompletionFilter(event.target.value)} className="block w-full min-h-11 bg-gray-950 border border-gray-700 rounded"><option value="all">すべて</option><option value="unfinished">未完了</option><option value="completed">完了済み・復習</option><option value="unaided">ヒント利用記録なしで完了</option></select></label>
           <Link href="/" tabIndex={0} className="inline-block min-h-11 text-blue-200 underline">ホームへ戻る</Link>
@@ -530,7 +531,7 @@ function LearningSession() {
           <p ref={saveAlertRef} role="alert" tabIndex={-1} className="focus-visible:outline-2 focus-visible:outline-blue-400">{saveError}</p>
           <button tabIndex={0} onClick={retrySaving} className="min-h-11 underline">保存を再試行</button>
         </div> : null}
-        <div className="flex-1 min-h-20 overflow-auto p-2 space-y-2">
+        <div tabIndex={-1} className="flex-1 min-h-20 overflow-auto p-2 space-y-2">
           {visibleScenarios.length === 0 ? <p className="p-3 text-sm text-gray-300">該当する演習がありません。検索語やコースを変更してください。</p> : null}
           {visibleScenarios.map(scenario => (
             <button tabIndex={0}

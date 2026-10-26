@@ -1,0 +1,20 @@
+import { expect, it } from 'vitest';
+import { scenarios } from '@/engine/scenarios';
+import { difficultyOverrides } from './lesson-difficulty';
+import { historyScenarios } from '@/engine/history-scenarios';
+import { assessGoal } from '@/engine/goal-checker';
+import { GitEngine } from '@/engine/git-simulator';
+it('reviewed difficulty keys name real selectable lessons and preserve their learning objectives', () => {
+  const ids = new Set(scenarios.map(item => item.id));
+  for (const id of Object.keys(difficultyOverrides)) expect(ids.has(id), id).toBe(true);
+  const original = historyScenarios.find(item => item.id === 'history-show')!;
+  const selected = scenarios.find(item => item.id === original.id)!;
+  expect(original.difficulty).toBe('advanced');
+  expect(selected.difficulty).toBe('beginner');
+  expect(selected.initialState).toEqual(original.initialState);
+  expect(selected.solution).toEqual(original.solution);
+  expect(selected.goal).toEqual(original.goal);
+  const engine = new GitEngine(selected.initialState);
+  const command = selected.solution![0]; const result = engine.execute(command);
+  expect(assessGoal(engine.getState(), selected, command, result).met).toBe(true);
+});
