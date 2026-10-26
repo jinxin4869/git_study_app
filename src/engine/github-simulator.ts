@@ -1,6 +1,7 @@
 import { CommandResult, GitState } from '@/types/git';
 import { dictionary, cloneGitData } from './git-state';
 import { mergeContent } from './merge-content';
+import { newCommitId } from './simulation-ids';
 
 // These commands change only the exercise's in-memory mock GitHub repository.
 export function githubCommand(state: GitState, args: string[], simulated: boolean): CommandResult {
@@ -107,7 +108,7 @@ export function githubCommand(state: GitState, args: string[], simulated: boolea
     if (merged.conflict) return fail('競合があります。ローカルでbaseを統合・解消してpushしてください。');
     if (merged.content !== undefined) tree[path] = merged.content;
   }
-  const id = 'pr-' + Math.random().toString(36).slice(2, 9);
+  const id = newCommitId(state, 'pr-');
   server.commits[id] = { id, message: `Merge PR #${number}: ${pr.title}`, parents: [baseId, latest], timestamp: Date.now(), author: 'Mock GitHub', changes: [], tree };
   server.branches[pr.base] = id;
   pr.headCommit = latest;
