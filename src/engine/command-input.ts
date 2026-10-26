@@ -48,6 +48,7 @@ const options: Record<string, { flags: string[]; values?: string[]; assignments?
   worktree: { flags: [], values: ['-b'] }, bisect: { flags: [] }, 'sparse-checkout': { flags: ['--cone'] },
   submodule: { flags: ['--init', '--remote'] }, lfs: { flags: [] },
   'gh pr create': { flags: ['--draft'], values: ['--title', '--body', '--base', '--head'] },
+  'gh pr edit': { flags: [], values: ['--base'] },
   'gh pr ready': { flags: ['--undo'] },
   'gh pr view': { flags: [] }, 'gh pr checks': { flags: [] }, 'gh pr close': { flags: [] }, 'gh pr merge': { flags: ['--merge'] },
   'simulate ci pass': { flags: [] }, 'simulate ci fail': { flags: [] },
@@ -97,7 +98,7 @@ const syntaxHelp: Record<string, string> = {
 };
 export const supportedCommands = [...Object.keys(options).filter(name => !name.includes(' ')), ...Object.keys(specialHelp)].sort();
 export function commandHelp(command?: string): string | null {
-  if (!command) return `このアプリの対応コマンド: ${supportedCommands.join('、')}\n詳しくは git help <command> または git <command> --help。\n模擬GitHub: gh pr create [--draft] / view / checks / ready [--undo] / merge（--mergeのみ）/ close。simulate review approve|request-changes / simulate ci pass|fail。\nファイル操作: touch <file>、echo "内容" > <file>、rm <file>、ls。cd <仮想worktree>、clear。\n任意のシェル・実GitHub・実ネットワークは実行しません。`;
+  if (!command) return `このアプリの対応コマンド: ${supportedCommands.join('、')}\n詳しくは git help <command> または git <command> --help。\n模擬GitHub: gh pr create [--draft] / view / checks / ready [--undo] / edit --base <branch> / merge（--mergeのみ）/ close。simulate review approve|request-changes / simulate ci pass|fail。\nファイル操作: touch <file>、echo "内容" > <file>、rm <file>、ls。cd <仮想worktree>、clear。\n任意のシェル・実GitHub・実ネットワークは実行しません。`;
   if (Object.hasOwn(specialHelp, command)) return specialHelp[command];
   if (!Object.hasOwn(options, command) || command.includes(' ')) return null;
   const spec = options[command];
