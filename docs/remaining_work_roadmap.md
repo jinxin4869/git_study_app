@@ -2,6 +2,10 @@
 
 現行状況は以下の最新節と[軽量改善の対応と残件](lightweight_improvements.md)を参照。以下の調査と過去PR作業時点の分類は履歴として保持する。
 
+## 追加対応：難易度の整理（2026-10-26 JST）
+
+**L06：一部完了（探索・難易度再分類は完了、所要時間の実測は未実施）**。追加課題の一律上級を見直し、判断量に基づく分類と未計測の目安を明示。[編集基準と範囲](lesson_difficulty.md)。既存の課題・採点・保存IDは維持する。
+
 ## 追加対応：ヒントなし総合課題（2026-10-26 JST）
 
 **L10：完了（2課題の範囲）**。公開対象の選別と、共有履歴を保った修正・手元作業の保護を、ヒントなしで判断する課題を追加。達成後に解答例を表示。[対応範囲](independent_capstones.md)。以前のL10「未着手」はこの更新で置き換える。
@@ -25,7 +29,7 @@
 | U06 | 完了（記載範囲） | ズーム・全体/HEAD表示・コミット詳細。[#19](https://github.com/jinxin4869/git_study_app/pull/19) | 2026-10-25 |
 | U07 | 完了（記載範囲） | help・補完・履歴検索・出力コピー。[#16](https://github.com/jinxin4869/git_study_app/pull/16)・[#17](https://github.com/jinxin4869/git_study_app/pull/17)・[#18](https://github.com/jinxin4869/git_study_app/pull/18) | 2026-10-25 |
 | D04 | 完了（記載範囲） | 貢献手順・報告フォーム・PRテンプレート・非公開情報の報告方針。[#26](https://github.com/jinxin4869/git_study_app/pull/26) | 2026-10-26 |
-| L06 | 一部完了 | 探索・所要時間の目安は[#16](https://github.com/jinxin4869/git_study_app/pull/16)。難易度再分類・所要時間の実測は残る | 2026-10-25 |
+| L06 | 一部完了 | 探索・所要時間の目安は[#16](https://github.com/jinxin4869/git_study_app/pull/16)。難易度再分類も完了。所要時間の実測は残る | 2026-10-25 |
 | G04/G08 | 一部完了 | Draft・移植元記録は[#25](https://github.com/jinxin4869/git_study_app/pull/25)・[#24](https://github.com/jinxin4869/git_study_app/pull/24)。各テーマの追加教材・操作は残る | 2026-10-26 |
 | E05 | 一部完了 | ID衝突防止は[#28](https://github.com/jinxin4869/git_study_app/pull/28)。時刻/ID生成器全体の注入等は残る | 2026-10-26 |
 | E06/T09 | 一部完了 | 計測・基本/高度な固定seed列・全139教材・保存境界は[#21](https://github.com/jinxin4869/git_study_app/pull/21)・[#22](https://github.com/jinxin4869/git_study_app/pull/22)。未検証経路は必要性を評価して追加 | 2026-10-26 |
