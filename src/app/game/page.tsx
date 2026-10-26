@@ -531,7 +531,7 @@ function LearningSession() {
           <p ref={saveAlertRef} role="alert" tabIndex={-1} className="focus-visible:outline-2 focus-visible:outline-blue-400">{saveError}</p>
           <button tabIndex={0} onClick={retrySaving} className="min-h-11 underline">保存を再試行</button>
         </div> : null}
-        <div className="flex-1 min-h-20 overflow-auto p-2 space-y-2">
+        <div tabIndex={-1} className="flex-1 min-h-20 overflow-auto p-2 space-y-2">
           {visibleScenarios.length === 0 ? <p className="p-3 text-sm text-gray-300">該当する演習がありません。検索語やコースを変更してください。</p> : null}
           {visibleScenarios.map(scenario => (
             <button tabIndex={0}
