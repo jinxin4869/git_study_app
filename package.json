@@ -20,6 +20,7 @@
     "test": "vitest run && node --test scripts/real-git-lab.test.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "bench": "vitest bench --run --maxWorkers=1 --reporter=verbose",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
