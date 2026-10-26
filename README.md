@@ -36,7 +36,7 @@
 | 並行作業・特殊構成 | 10 | worktree、sparse-checkout、submodule、Git LFSの対象設定 |
 | 実務の総合演習 | 7 | 機能開発からPR、チームの競合、緊急修正、履歴整理、復旧、revert、リリース保守 |
 
-GitHub演習では、`gh pr create/view/checks/merge/close` に加え、アプリ専用の `simulate` コマンドで模擬レビュアーとCIを操作します。
+GitHub演習では、`gh pr create/view/checks/ready/edit/merge/close` に加え、アプリ専用の `simulate` コマンドで模擬レビュアーとCIを操作します。
 
 ```text
 gh pr create --title "Add login" --body "ログイン機能とテストを追加" --base main
@@ -49,9 +49,11 @@ gh pr merge 1 --merge
 
 `gh pr create --draft`で下書きPRを作成できます。Draft中は承認とCIが揃っていてもマージできず、`gh pr ready [番号]`で準備完了、`--undo`でDraftへ戻せます。[模擬Draftの対応範囲](docs/mock_pr_draft.md)を参照してください。
 
+`gh pr edit [番号] --base <branch>`で模擬PRの統合先を変更できます。変更後はレビューとCIを確認し直します。[統合先変更の対応範囲](docs/mock_pr_base_change.md)を参照してください。
+
 ### 学び方と再現範囲
 
-[実務向けGit学習カリキュラム](docs/practical_git_curriculum.md)に、細かい操作を12章に整理しています。一操作ずつ練習したあと、7つの総合演習で実務の流れを通して試せます。検索は説明・ヒント内のコマンドも対象です。クリアした演習の完了記録はこのブラウザに保存されます。
+[実務向けGit学習カリキュラム](docs/practical_git_curriculum.md)に、細かい操作を12章に整理しています。一操作ずつ練習したあと、手順付き7つとヒントなし2つの総合課題で実務の流れを通して試せます。検索は説明・ヒント内のコマンドも対象です。クリアした演習の完了記録はこのブラウザに保存されます。
 
 対話的rebaseは画面の編集欄でtodoを変更し、`git rebase --continue` で進めます。`git add -p` は提示された変更に `y`／`n`／`q` で応答します。
 
@@ -86,7 +88,7 @@ gh pr merge 1 --merge
 - 難易度・完了状態で絞り込めます。「ヒント利用記録なし」は過去のヒント記録がない演習です。所要時間は未計測の目安です。追加した2つの絞り込みは画面内だけで保持します。
 - `/game?lesson=level-1-3`のような演習URLで初期状態を共有できます。ブラウザの戻る・進むでも演習を切り替えます。
 - 「途中状態・バックアップ」で保存・再開、JSON書き出し・取り込みができます。rebase・競合・部分ステージング中も保存できます。未適用の競合編集は適用後に保存してください。バックアップは保存済み記録のみで、コマンドやファイル内容も含まれます。5MB以下・形式/ID/参照等を検証し、取り込み前に上書き範囲を表示します。
-- 「操作リファレンス・理解度チェック」には用語比較と6問の確認問題があります。端末では `git help`、`git help restore`、`git restore --help` が使えます。helpを開くだけでは演習を達成しません。
+- 「操作リファレンス・理解度チェック」には用語比較と9問の確認問題（復旧の限界3問を含む）があります。端末では `git help`、`git help restore`、`git restore --help` が使えます。helpを開くだけでは演習を達成しません。
 - `/real-git`に、自分のPCで実行する4つの実Git演習があります。`npm run lab -- setup staging`等でOS一時フォルダに専用リポジトリを作り、`npm run lab -- verify <パス>`で結果を検証します。実GitHub接続は不要です。
 
 今回の対応・互換性・検証結果は[一括改善記録](docs/batch_improvements.md)を参照してください。
@@ -190,7 +192,7 @@ GitHub ActionsではmainへのpushとPRごとに、lint・型チェック・ユ�
 -   [最新の公開確認と再監査](docs/post_release_verification.md): 依存更新後の公開SHA、18件の公開テスト、4点の対応状況
 -   [実機確認の手順と結果票](docs/manual_device_checks.md): IME、ソフトキーボード、読み上げ、Safari、ページズームの未検証項目
 -   [公開確認と戻し方](docs/release_runbook.md): PR/本番確認、版付き再現情報、保存互換性、rollback
--   [実務向けGit学習カリキュラム](docs/practical_git_curriculum.md): 12章の学習順序、145演習の対応状況、7つの総合演習、再現範囲
+-   [実務向けGit学習カリキュラム](docs/practical_git_curriculum.md): 12章の学習順序、145演習の対応状況、手順付き7つとヒントなし2つの総合課題、再現範囲
 -   [画面修正とE2Eテスト](docs/audits/ui_fixes_and_e2e.md): 監査の5項目への対応、28ケースのブラウザテストとCI
 -   [レビューと検証の記録](docs/review_verification.md): 修正した不具合、回帰テスト、ブラウザ確認、クラウドでの確認範囲
 -   [01_project_setup.md](docs/01_project_setup.md): プロジェクトセットアップ
