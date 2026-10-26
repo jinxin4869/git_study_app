@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { commandHelp, supportedCommands } from '@/engine/command-input';
+import { recoveryCases, recoveryQuestions } from '@/learning/recovery-guide';
 
 const glossary = [
   ['HEAD・index・作業ツリー', 'HEADは現在のコミット、index（ステージ）は次のコミットの候補、作業ツリーは編集している内容です。addは作業ツリーからindexへ、commitはindexから履歴へ記録します。'],
@@ -11,6 +12,7 @@ const glossary = [
   ['stash applyとpop', 'applyは保管を残して復元し、popは復元に成功すると保管を削除します。競合したpopでは保管が残ります。'],
 ];
 const questions = [
+  ...recoveryQuestions,
   { text: 'addした後に同じファイルを再編集し、commitしました。記録されるのは？', choices: ['最後にaddした時点の内容', '現在の作業ツリーの全内容', 'HEADと作業ツリーの両方'], answer: 0, reason: 'commitが記録するのはindexです。再編集した内容は、もう一度addするまで作業ツリーにだけ残ります。' },
   { text: 'チームで共有したコミットを取り消し、履歴を残したいときは？', choices: ['reset --hard', 'revert', 'ブランチ名の変更'], answer: 1, reason: 'revertは逆の変更を新しいコミットにします。共有済み参照を書き換える操作との違いを確認しましょう。' },
   { text: 'fetch直後、現在のローカルブランチはどうなる？', choices: ['必ずリモートと同じになる', '未コミット変更が消える', '参照を取得するだけで、自動統合しない'], answer: 2, reason: 'fetchはリモート追跡参照を更新します。統合はmergeやrebaseで別に行います。' },
@@ -26,6 +28,15 @@ export function LearningReference() {
     <label className="block">対応コマンド<select aria-label="コマンドリファレンス" value={command} onChange={event => setCommand(event.target.value)} className="block w-full min-h-11 bg-gray-950 border rounded"><option value="">一覧・制約</option>{supportedCommands.map(name => <option key={name}>{name}</option>)}</select></label>
     <p className="whitespace-pre-wrap break-words">{commandHelp(command || undefined)}</p>
     {glossary.map(([term, explanation]) => <details key={term}><summary tabIndex={0} className="min-h-11 cursor-pointer">{term}</summary><p>{explanation}</p></details>)}
+    <section aria-label="復旧できる内容・できない内容" className="space-y-2">
+      <h2 className="font-bold">復旧できる内容・できない内容</h2>
+      <p>記録済みの内容と未記録の編集を区別します。reflogが残るこの模擬環境だけで、実Gitの永久復旧を保証しません。</p>
+      {recoveryCases.map(item => <details key={item.situation}><summary tabIndex={0} className="min-h-11 cursor-pointer">{item.situation}</summary><p>{item.possible}</p><p className="mt-1">{item.limit}</p></details>)}
+      <p>次の演習へ移動すると、現在の演習の途中状態を置き換えます。必要なら先にcheckpointを保存してください。</p>
+      <Link href="/game?lesson=history-recover-reset" className="block min-h-11 underline" tabIndex={0}>記録済みコミットの救出を練習</Link>
+      <Link href="/game?lesson=workflow-recovery" className="block min-h-11 underline" tabIndex={0}>削除したブランチの救出を練習</Link>
+      <p>自由練習のgit clean -n -dは候補の確認だけです。実削除は行いません。</p>
+    </section>
     <h2 className="font-bold">理解度チェック</h2><p>演習の完了とは別に、操作の結果を考えて答えます。</p>
     {questions.map((question, index) => <fieldset key={question.text} className="border border-gray-600 rounded p-2"><legend>{index + 1}. {question.text}</legend>{question.choices.map((choice, value) => <label key={choice} className="flex gap-2 items-center min-h-11"><input type="radio" name={`question-${index}`} checked={answers[index] === value} onChange={() => setAnswers(previous => ({ ...previous, [index]: value }))} />{choice}</label>)}{answers[index] !== undefined ? <p role="status">{answers[index] === question.answer ? '正解。' : 'もう一度考えてみましょう。'}{question.reason}</p> : null}</fieldset>)}
     <p>正解: {questions.filter((question, index) => answers[index] === question.answer).length} / {questions.length}</p>
