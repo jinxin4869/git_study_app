@@ -1,0 +1,23 @@
+name: 機能・教材の提案
+description: 学習中の困りごとと、必要な到達状態を提案します。
+title: "feat: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 困っている場面
+      description: 演習・操作・利用者の目的を、具体的な例で記載してください。
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 必要な到達状態
+      description: 何ができれば解決するか、利用者の操作と結果で説明してください。
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 現在の回避策・参考
+      description: 既存機能で試したこと、実Gitとの差、対象外にしてよいことがあれば記載してください。

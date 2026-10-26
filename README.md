@@ -178,6 +178,8 @@ GitHub ActionsではmainへのpushとPRごとに、lint・型チェック・ユ�
 
 ## ドキュメント
 
+-   [軽量改善の対応と残件](docs/lightweight_improvements.md): PRごとの対応範囲、追加機能の使い方、統合検証、未対応項目
+-   [開発・不具合報告・PRの手順](CONTRIBUTING.md): セットアップ、変更に応じた検証、再現条件とレビューの記載
 詳細な設計や実装内容については、`docs/` ディレクトリ内のドキュメントを参照してください。
 
 -   [今回の改善と検証](docs/learning_refinements.md): スクロール、全教材レビュー、採点・入力・保存の修正と限界
