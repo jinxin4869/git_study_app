@@ -41,6 +41,7 @@ export interface GitState {
     kind: 'rebase' | 'cherry-pick' | 'revert';
     original: GitState;
     remaining: string[];
+    recordOrigin?: boolean;
     current?: { id: string; message: string; committed?: boolean; amend?: boolean };
     todo?: string;
     awaiting?: 'todo' | 'edit' | 'reword';
