@@ -26,7 +26,7 @@ describe('reviewed learning material', () => {
   it('suggests the next unfinished exercise and wraps for review without requiring prior completion', () => {
     expect(recommendedNext('level-1-1', new Set())?.id).toBe('level-1-2');
     expect(recommendedNext('level-1-1', new Set(['level-1-2']))?.id).toBe('level-1-3');
-    expect(recommendedNext('mistake-stale-approval', new Set())?.id).toBe('level-1-1');
+    expect(recommendedNext('capstone-shared-recovery', new Set())?.id).toBe('level-1-1');
     expect(recommendedNext('level-1-1', new Set(scenarios.map(item => item.id)))).toBeNull();
     expect(recommendedNext('invalid', new Set())).toBeNull();
   });

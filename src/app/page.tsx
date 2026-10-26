@@ -34,7 +34,7 @@ export default function Home() {
           </h1>
           
           <p className="text-xl text-gray-400 max-w-2xl leading-relaxed">
-            ブラウザ内の模擬Gitと142の演習で練習できます。
+            ブラウザ内の模擬Gitと144の演習で練習できます。
             <br className="hidden md:block" />
             段階ヒントと未達の条件を確認しながら、操作と復旧を学べます。
           </p>

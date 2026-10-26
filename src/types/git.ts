@@ -95,6 +95,7 @@ export interface Scenario {
   description: string;
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   category?: string;
+  practiceMode?: 'independent';
   solution?: string[];
   expectedFailures?: string[];
   initialState?: GitState; // If undefined, start with empty init
