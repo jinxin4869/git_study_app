@@ -9,11 +9,13 @@ export function githubCommand(state: GitState, args: string[], simulated: boolea
   const fail = (message: string): CommandResult => ({ success: false, message });
   if (!github || !server) return fail('GitHub模擬演習を選択してください。実際のGitHubには接続しません。');
   const success = (message: string): CommandResult => ({ success: true, message, newState: cloneGitData(state) });
-  if (!simulated && args[0] !== 'pr') return fail('対応コマンド: gh pr create/view/checks/merge/close');
+  if (!simulated && args[0] !== 'pr') return fail('対応コマンド: gh pr create/view/checks/ready/merge/close');
   const action = simulated ? args[0] : args[1];
   const values = new Map<string, string>();
   const targets: string[] = [];
   let merge = false;
+  let draft = false;
+  let undoReady = false;
   const allowed = !simulated && action === 'create' ? ['--title', '--body', '--base', '--head'] : simulated && action === 'review' ? ['--body'] : [];
   for (let i = 2; i < args.length; i++) {
     const token = args[i];
@@ -21,6 +23,8 @@ export function githubCommand(state: GitState, args: string[], simulated: boolea
       if (args[i + 1] === undefined || values.has(token)) return fail(`${token}には一つの値を指定してください。`);
       values.set(token, args[++i]);
     } else if (!simulated && action === 'merge' && token === '--merge') merge = true;
+    else if (!simulated && action === 'create' && token === '--draft') draft = true;
+    else if (!simulated && action === 'ready' && token === '--undo') undoReady = true;
     else if (token.startsWith('-')) return fail(`模擬GitHubでは未対応の引数です: ${token}`);
     else targets.push(token);
   }
@@ -35,8 +39,8 @@ export function githubCommand(state: GitState, args: string[], simulated: boolea
     if (!server.branches[head] || !server.branches[base] || head === base || server.branches[head] === server.branches[base]) return fail('差分のあるブランチを先にpushしてください。');
     if (Object.values(github.pullRequests).some(pr => pr.status === 'open' && pr.head === head && pr.base === base)) return fail('このブランチのPRは既に作成済みです。');
     const number = Math.max(0, ...Object.keys(github.pullRequests).map(Number)) + 1;
-    github.pullRequests[number] = { number, title, body, head, base, headCommit: server.branches[head], status: 'open' };
-    return success(`模擬PR #${number} を作成しました。レビューとCI結果を確認してください。`);
+    github.pullRequests[number] = { number, title, body, head, base, headCommit: server.branches[head], status: 'open', ...(draft ? { draft: true } : {}) };
+    return success(`模擬PR #${number} を作成しました。${draft ? 'Draft（下書き）です。gh pr readyでレビュー準備完了にできます。' : 'レビューとCI結果を確認してください。'}`);
   }
   const reference = targets[0] ?? '1';
   if (!/^[1-9]\d*$/.test(reference) || !Number.isSafeInteger(Number(reference))) return fail('PR番号には正の整数を指定してください。');
@@ -57,15 +61,21 @@ export function githubCommand(state: GitState, args: string[], simulated: boolea
     }
     return fail('模擬操作: simulate ci pass|fail [番号] / simulate review approve|request-changes [番号] --body "コメント"');
   }
-  if (action === 'view') return success(`#${pr.number} ${pr.title}\n${pr.body}\n${pr.head} → ${pr.base}\n状態: ${pr.status}\nレビュー: ${pr.review?.commitId === latest ? pr.review.result : '承認待ち'}\nCI: ${pr.checks?.commitId === latest ? pr.checks.status : '実行待ち'}`);
+  if (action === 'view') return success(`#${pr.number} ${pr.title}\n${pr.body}\n${pr.head} → ${pr.base}\n状態: ${pr.status}${pr.draft ? ' (Draft・下書き)' : ''}\nレビュー: ${pr.review?.commitId === latest ? pr.review.result : '承認待ち'}\nCI: ${pr.checks?.commitId === latest ? pr.checks.status : '実行待ち'}`);
   if (action === 'checks') return success(`CI: ${pr.checks?.commitId === latest ? pr.checks.status : 'pending'} (${latest})`);
   if (pr.status !== 'open') return fail('PRは開いていません。');
+  if (action === 'ready') {
+    if (!!pr.draft === undoReady) return fail(undoReady ? 'PRは既にDraftです。' : 'PRは既にレビュー準備完了です。');
+    pr.draft = undoReady;
+    return success(`PR #${number} を${undoReady ? 'Draft（下書き）へ戻しました。' : 'レビュー準備完了にしました。'}`);
+  }
   if (action === 'close') {
     pr.status = 'closed';
     return success(`PR #${number} を閉じました。`);
   }
-  if (action !== 'merge') return fail('対応コマンド: gh pr create/view/checks/merge/close');
+  if (action !== 'merge') return fail('対応コマンド: gh pr create/view/checks/ready/merge/close');
   if (!merge) return fail('この演習では gh pr merge [番号] --merge を使います。');
+  if (pr.draft) return fail('Draft PRはマージできません。gh pr ready [番号]でレビュー準備完了にしてください。');
   if (github.requireReview && (pr.review?.commitId !== latest || pr.review.result !== 'approved')) return fail('最新コミットへの承認が必要です。');
   if (github.requireCI && (pr.checks?.commitId !== latest || pr.checks.status !== 'success')) return fail('最新コミットのCI成功が必要です。');
   // Find a common ancestor and merge file snapshots; do not drop target changes.
